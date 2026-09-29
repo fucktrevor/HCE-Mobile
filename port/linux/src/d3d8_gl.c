@@ -2472,6 +2472,17 @@ static void gl_check_errors(const char *where)
 		enabled = config_boolean("debug.gl_debug");
 	if (!enabled)
 		return;
+#ifdef HALO_WEB
+	/* glGetError waits for the browser's GPU process (Safari: about a
+	millisecond): once a frame, with the errors of the frame before */
+	{
+		static unsigned long checked_frame = ~0UL;
+
+		if (checked_frame == device.frame)
+			return;
+		checked_frame = device.frame;
+	}
+#endif
 	while ((error = glGetError()) != GL_NO_ERROR)
 	{
 		if (reports++ < 200)
