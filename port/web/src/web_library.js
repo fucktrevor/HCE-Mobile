@@ -53,15 +53,15 @@ addToLibrary({
       }
     },
     reportCalls() {
-      if (++webHalo.frames % 120) return;
+      if (++webHalo.frames % 60) return;
       var calls = webHalo.calls, time = webHalo.callTime, total = 0, totalTime = 0;
       for (var name in calls) { total += calls[name]; totalTime += time[name]; }
-      var top = Object.keys(calls).sort((a, b) => calls[b] - calls[a]).filter((name) => calls[name])
-        .map((name) => `${name} ${(calls[name] / 120).toFixed(0)} ${(time[name] / 120).toFixed(2)}ms`);
-      var by = Object.keys(webHalo.bytesBy).filter((n) => webHalo.bytesBy[n]).map((n) => `${n} ${(webHalo.bytesBy[n] / 120 / 1024).toFixed(0)}K`).join(', ');
-      webHalo.post('haloMessage', [0, `GL per frame: ${((webHalo.bytes || 0) / 120 / 1024).toFixed(0)} KB (${by}); ${(total / 120).toFixed(0)} calls ${(totalTime / 120).toFixed(2)}ms; ` + top.join(', ')]);
-      webHalo.bytes = 0; webHalo.bytesBy = {};
+      var top = Object.keys(calls).sort((a, b) => time[b] - time[a]).filter((name) => calls[name]).slice(0, 3)
+        .map((name) => `${name} ${(time[name] / 60).toFixed(1)}`);
+      // the frame rate view's third line (app.js)
+      webHalo.post('haloMessage', [7, `gl ${(total / 60).toFixed(0)} calls ${(totalTime / 60).toFixed(1)} ms · ${((webHalo.bytes || 0) / 60 / 1024).toFixed(0)} KB\n${top.join(' · ')}`]);
       for (var name in calls) { calls[name] = 0; time[name] = 0; }
+      webHalo.bytes = 0; webHalo.bytesBy = {};
     },
   },
 
@@ -120,7 +120,7 @@ addToLibrary({
     webHalo.post('haloPresent', [bitmap], [bitmap]);
   },
 
-  // kind: 0 status, 1 notice, 2 clipboard text, 3 fatal error, 6 frame timing
+  // kind: 0 status, 1 notice, 2 clipboard text, 3 fatal error, 6 frame timing, 7 WebGL calls
   web_js_post__deps: ['$webHalo'],
   web_js_post: (kind, text) => {
     webHalo.post('haloMessage', [kind, UTF8ToString(text)]);

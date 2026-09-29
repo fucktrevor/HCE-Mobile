@@ -384,7 +384,7 @@ can run the game, copies the game data out of the player's disc image
       const seconds = (now - last) / 1000;
       const shown = (state.presented || 0) - frames;
       view.textContent = `${Math.round(shown / seconds)} fps · display ${Math.round(ticks / seconds)} Hz` +
-        (state.timing ? `\n${state.timing}` : '');
+        (state.timing ? `\n${state.timing}` : '') + (state.glTiming ? `\n${state.glTiming}` : '');
       frames = state.presented || 0;
       ticks = 0;
       last = now;
@@ -470,6 +470,8 @@ can run the game, copies the game data out of the player's disc image
     const argumentsList = Array.isArray(window.__haloArgs) ? window.__haloArgs.slice() : [];
     if (!settings.vsync) argumentsList.push('--HALO_NO_VSYNC=1');
     if (settings.glDebug) argumentsList.push('--HALO_GL_DEBUG=1');
+    // the frame rate view also counts the WebGL calls and their time
+    if (settings.showTiming) argumentsList.push('--HALO_WEB_GL_STATS=1');
 
     window.Module = {
       wasmMemory: state.memory,
@@ -490,6 +492,7 @@ can run the game, copies the game data out of the player's disc image
         else if (kind === 2) log('clipboard: ' + text);
         else if (kind === 4) log('thread error: ' + text);
         else if (kind === 6) state.timing = text;
+        else if (kind === 7) state.glTiming = text;
         else if (kind === 5) {
           log('game: ' + text);
           $('fatal').querySelector('h2').textContent = 'The game quit';
