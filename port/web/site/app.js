@@ -36,7 +36,7 @@ can run the game, copies the game data out of the player's disc image
   // ---------- settings (this browser's; nothing else depends on them)
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
-  const settings = { touch: coarsePointer, look: 1.4, vsync: true, glDebug: false, showTiming: true };
+  const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: true };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
@@ -513,6 +513,7 @@ can run the game, copies the game data out of the player's disc image
           canvas,
           touchRoot: $('touch'),
           touch: settings.touch,
+          touchLayout: settings.touchLayout,
         });
         HaloInput.setLookSensitivity(settings.look);
         HaloNet.attach({ memory: state.memory, base: state.shared, offsets: state.offsets });
@@ -664,6 +665,8 @@ can run the game, copies the game data out of the player's disc image
     $('opt-look').value = settings.look;
     $('opt-vsync').checked = settings.vsync;
     $('opt-touch').onchange = (event) => { settings.touch = event.target.checked; saveSettings(); };
+    $('opt-layout').value = settings.touchLayout;
+    $('opt-layout').onchange = (event) => { settings.touchLayout = event.target.value; saveSettings(); };
     $('opt-look').oninput = (event) => {
       settings.look = parseFloat(event.target.value);
       saveSettings();

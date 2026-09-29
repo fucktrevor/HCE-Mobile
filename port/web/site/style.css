@@ -132,7 +132,7 @@ code { background: #0e1117; padding: 1px 5px; border-radius: 4px; }
 .room-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0 4px; }
 .room-line strong { font-size: 20px; letter-spacing: 0.12em; color: var(--accent); }
 .small-button { min-height: 34px; padding: 0 12px; font-size: 13px; }
-.settings input[type=text], .settings input[type=password] {
+.settings input[type=text], .settings input[type=password], .settings select {
   flex: 1;
   min-width: 120px;
   min-height: 36px;
@@ -342,16 +342,18 @@ body.has-controller .touch-layer { display: none; }
 
 .touch-dpad .touch-button {
   width: 38px;
-  height: 40px;
+  height: 36px;
   border-radius: 4px;
   background: rgba(20, 21, 20, 0.7);
   border-color: rgba(120, 125, 120, 0.4);
 }
 
-.touch-dpad .up { left: 42px; top: 8px; }
-.touch-dpad .down { left: 42px; bottom: 8px; }
-.touch-dpad .left { left: 8px; top: 41px; width: 40px; height: 38px; }
-.touch-dpad .right { right: 8px; top: 41px; width: 40px; height: 38px; }
+/* the arms meet at the centre without overlapping (the plate is 124 wide,
+its border inside) */
+.touch-dpad .up { left: 42px; top: 7px; }
+.touch-dpad .down { left: 42px; top: 79px; }
+.touch-dpad .left { left: 7px; top: 43px; width: 35px; height: 36px; }
+.touch-dpad .right { left: 80px; top: 43px; width: 35px; height: 36px; }
 
 .touch-dpad .touch-button::after {
   content: "";
@@ -402,6 +404,170 @@ body.has-controller .touch-layer { display: none; }
   .touch-button.trigger { top: calc(46px + env(safe-area-inset-top)); height: 46px; width: 86px; }
   .touch-button.left-click, .touch-button.right-click { bottom: calc(var(--edge-bottom) + 158px); }
   .touch-button.right-click { right: calc(210px + var(--edge-right)); }
+}
+
+/* ---------- touch controls: the modern layout
+
+As in a modern mobile shooter: a large fire button under the right thumb,
+which also aims while held, the actions around it as white line icons on dark
+glass, a second fire button for the left thumb, pause and score at the top,
+and a floating stick anywhere on the left half. Sizes are in --u, which
+shrinks on small phones. */
+
+.touch-layer.modern { --u: 1px; }
+
+.touch-layer.modern .touch-button {
+  width: calc(54 * var(--u));
+  height: calc(54 * var(--u));
+  border-radius: 50%;
+  background: rgba(8, 10, 14, 0.36);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+
+.touch-layer.modern .touch-button.pressed {
+  transform: scale(0.92);
+  filter: none;
+  background: rgba(255, 255, 255, 0.88);
+  color: rgba(10, 12, 16, 0.95);
+  border-color: #fff;
+}
+
+.touch-layer.modern .touch-button .glyph { display: flex; width: 52%; height: 52%; }
+.touch-layer.modern .touch-button .glyph svg { width: 100%; height: 100%; }
+
+.touch-layer.modern .touch-button .caption {
+  margin-top: calc(2 * var(--u));
+  font-size: calc(8 * var(--u));
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* the Xbox button each one is, for the menus */
+.touch-layer.modern .badge {
+  position: absolute;
+  top: calc(-4 * var(--u));
+  right: calc(-4 * var(--u));
+  width: calc(17 * var(--u));
+  height: calc(17 * var(--u));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 800 calc(10 * var(--u))/1 -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.touch-layer.modern .badge-a { background: #2f9a2f; }
+.touch-layer.modern .badge-b { background: #c8262c; }
+.touch-layer.modern .badge-x { background: #2860c8; }
+.touch-layer.modern .badge-y { background: #d8a800; color: #2a2000; }
+
+/* right thumb */
+.touch-layer.modern .m-fire {
+  width: calc(86 * var(--u));
+  height: calc(86 * var(--u));
+  right: calc(40 * var(--u) + var(--edge-right));
+  bottom: calc(96 * var(--u) + var(--edge-bottom));
+  border-width: 2.5px;
+  background: rgba(8, 10, 14, 0.42);
+}
+
+.touch-layer.modern .m-fire .glyph { width: 46%; height: 46%; }
+
+.touch-layer.modern .m-zoom { right: calc(146 * var(--u) + var(--edge-right)); bottom: calc(168 * var(--u) + var(--edge-bottom)); }
+.touch-layer.modern .m-melee { right: calc(150 * var(--u) + var(--edge-right)); bottom: calc(86 * var(--u) + var(--edge-bottom)); }
+.touch-layer.modern .m-reload {
+  width: calc(50 * var(--u));
+  height: calc(50 * var(--u));
+  right: calc(58 * var(--u) + var(--edge-right));
+  bottom: calc(206 * var(--u) + var(--edge-bottom));
+}
+.touch-layer.modern .m-jump {
+  width: calc(60 * var(--u));
+  height: calc(60 * var(--u));
+  right: calc(22 * var(--u) + var(--edge-right));
+  bottom: calc(14 * var(--u) + var(--edge-bottom));
+}
+.touch-layer.modern .m-crouch { right: calc(104 * var(--u) + var(--edge-right)); bottom: calc(14 * var(--u) + var(--edge-bottom)); }
+.touch-layer.modern .m-grenade {
+  width: calc(50 * var(--u));
+  height: calc(50 * var(--u));
+  right: calc(142 * var(--u) + var(--edge-right));
+  bottom: calc(246 * var(--u) + var(--edge-bottom));
+}
+.touch-layer.modern .m-grenade-type {
+  width: calc(40 * var(--u));
+  height: calc(40 * var(--u));
+  right: calc(214 * var(--u) + var(--edge-right));
+  bottom: calc(262 * var(--u) + var(--edge-bottom));
+}
+.touch-layer.modern .m-light {
+  width: calc(40 * var(--u));
+  height: calc(40 * var(--u));
+  right: calc(22 * var(--u) + var(--edge-right));
+  bottom: calc(276 * var(--u) + var(--edge-bottom));
+}
+
+/* weapon swap: a wide pill beside crouch, as a weapon slot */
+.touch-layer.modern .m-swap {
+  width: calc(76 * var(--u));
+  height: calc(42 * var(--u));
+  border-radius: calc(21 * var(--u));
+  right: calc(178 * var(--u) + var(--edge-right));
+  bottom: calc(20 * var(--u) + var(--edge-bottom));
+}
+.touch-layer.modern .m-swap .glyph { width: 34%; height: 62%; }
+
+/* left thumb: a second fire button above the stick */
+.touch-layer.modern .m-fire2 {
+  width: calc(60 * var(--u));
+  height: calc(60 * var(--u));
+  left: calc(36 * var(--u) + var(--edge-left));
+  bottom: calc(212 * var(--u) + var(--edge-bottom));
+}
+
+/* pause and score in the top corners */
+.touch-layer.modern .m-top {
+  width: calc(44 * var(--u));
+  height: calc(32 * var(--u));
+  border-radius: calc(16 * var(--u));
+  top: calc(8 * var(--u) + env(safe-area-inset-top));
+}
+.touch-layer.modern .m-top .glyph { width: 40%; height: 56%; }
+.touch-layer.modern .m-top .caption { display: none; }
+.touch-layer.modern .m-score { left: calc(50% - 52 * var(--u)); }
+.touch-layer.modern .m-pause { left: calc(50% + 8 * var(--u)); }
+
+/* the stick: a ring of glass that appears where the thumb lands */
+.touch-layer.modern .touch-stick {
+  width: 120px;
+  height: 120px;
+  left: calc(56 * var(--u) + var(--edge-left));
+  bottom: calc(40 * var(--u) + var(--edge-bottom));
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(8, 10, 14, 0.22);
+  opacity: 0.7;
+}
+
+.touch-layer.modern .touch-knob {
+  left: 34px;
+  top: 34px;
+  width: 52px;
+  height: 52px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+@media (max-height: 400px) {
+  .touch-layer.modern { --u: 0.88px; }
+}
+
+@media (max-height: 340px) {
+  .touch-layer.modern { --u: 0.76px; }
 }
 
 /* Settings: "Show the frame rate" */

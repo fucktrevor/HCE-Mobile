@@ -245,13 +245,33 @@ const HaloInput = (() => {
 
   // ---------- touch controls
 
-  function buildTouchControls(root) {
+  // Line icons for the modern layout (24 by 24, drawn with the current colour)
+  const ICON = {
+    fire: '<circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
+    scope: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 4v5M12 15v5M4 12h5M15 12h5"/>',
+    jump: '<path d="M12 19V6M6 11l6-6 6 6"/><path d="M5 21h14"/>',
+    crouch: '<path d="M12 4v11M6 10l6 6 6-6"/><path d="M5 21h14"/>',
+    reload: '<path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M19 4v4h-4"/>',
+    grenade: '<circle cx="12" cy="14" r="6"/><path d="M10 8V5h4v3M14 5l4-2"/>',
+    grenadeSwap: '<circle cx="9" cy="14" r="5"/><path d="M8 9V6h2v3"/><path d="M16 5h5M19 3l2 2-2 2M21 11h-5M18 9l-2 2 2 2"/>',
+    melee: '<path d="M7 13V8a1.5 1.5 0 0 1 3 0v3M10 11V6.5a1.5 1.5 0 0 1 3 0V11M13 11V7.5a1.5 1.5 0 0 1 3 0V12M16 12V9.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1a5 5 0 0 1-5-5v-2a1.5 1.5 0 0 1 0-3"/>',
+    swap: '<path d="M4 8h14M14 4l4 4-4 4"/><path d="M20 16H6M10 12l-4 4 4 4"/>',
+    light: '<path d="M4 9h7l5-4v14l-5-4H4z"/><path d="M19 8l2-1M19 12h3M19 16l2 1"/>',
+    pause: '<path d="M9 5v14M15 5v14"/>',
+    score: '<path d="M5 6h14M5 12h14M5 18h14"/>',
+  };
+
+  function icon(name) {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name]}</svg>`;
+  }
+
+  // [id, label (text, or an icon: {icon}), button bit or trigger axis, class, caption, badge]
+  const TOUCH_LAYOUTS = {
     // the original Xbox controller's layout (the Controller S): gem-coloured
     // A, B, X and Y in a diamond with the white and black buttons below
     // them, the L and R triggers above each side, back and start between
     // the thumbs, and the d-pad under the left thumb
-    const layout = [
-      // [id, label, button bit or trigger axis, class, caption]
+    xbox: [
       ['a', 'A', { bit: BUTTON.SOUTH }, 'face face-a', 'Jump'],
       ['b', 'B', { bit: BUTTON.EAST }, 'face face-b', 'Melee'],
       ['x', 'X', { bit: BUTTON.WEST }, 'face face-x', 'Reload'],
@@ -268,7 +288,33 @@ const HaloInput = (() => {
       ['down', '', { bit: BUTTON.DPAD_DOWN }, 'dpad down', ''],
       ['left', '', { bit: BUTTON.DPAD_LEFT }, 'dpad left', ''],
       ['right', '', { bit: BUTTON.DPAD_RIGHT }, 'dpad right', ''],
-    ];
+    ],
+    // a modern mobile shooter's layout: a large fire button under the right
+    // thumb that also aims while held, the actions around it as icons, a
+    // second fire button for the left thumb, and pause and score at the top.
+    // In the menus the stick moves and Jump (A) and Melee (B) select and go
+    // back, as their badges say.
+    modern: [
+      ['fire', { icon: 'fire' }, { axis: 5 }, 'm m-fire', ''],
+      ['fire2', { icon: 'fire' }, { axis: 5 }, 'm m-fire2', ''],
+      ['rs', { icon: 'scope' }, { bit: BUTTON.RIGHT_STICK }, 'm m-zoom', 'Zoom'],
+      ['a', { icon: 'jump' }, { bit: BUTTON.SOUTH }, 'm m-jump', 'Jump', 'A'],
+      ['ls', { icon: 'crouch' }, { bit: BUTTON.LEFT_STICK }, 'm m-crouch', 'Crouch'],
+      ['b', { icon: 'melee' }, { bit: BUTTON.EAST }, 'm m-melee', 'Melee', 'B'],
+      ['x', { icon: 'reload' }, { bit: BUTTON.WEST }, 'm m-reload', 'Reload', 'X'],
+      ['lt', { icon: 'grenade' }, { axis: 4 }, 'm m-grenade', 'Grenade'],
+      ['black', { icon: 'grenadeSwap' }, { bit: BUTTON.RIGHT_SHOULDER }, 'm m-grenade-type', 'Type'],
+      ['y', { icon: 'swap' }, { bit: BUTTON.NORTH }, 'm m-swap', 'Swap', 'Y'],
+      ['white', { icon: 'light' }, { bit: BUTTON.LEFT_SHOULDER }, 'm m-light', 'Light'],
+      ['back', { icon: 'score' }, { bit: BUTTON.BACK }, 'm m-top m-score', 'Score'],
+      ['start', { icon: 'pause' }, { bit: BUTTON.START }, 'm m-top m-pause', 'Pause'],
+    ],
+  };
+
+  function buildTouchControls(root, layoutName) {
+    const layoutKey = TOUCH_LAYOUTS[layoutName] ? layoutName : 'modern';
+    const layout = TOUCH_LAYOUTS[layoutKey];
+    root.classList.add(layoutKey);
     const held = new Map(); // touch identifier -> control
     const buttonState = new Map(); // control id -> count of touches
     const stick = { id: null, x: 0, y: 0, element: null, knob: null };
@@ -286,8 +332,8 @@ const HaloInput = (() => {
     const controls = {};
     const dpad = document.createElement('div');
     dpad.className = 'touch-dpad';
-    root.appendChild(dpad);
-    for (const [id, label, action, cls, caption] of layout) {
+    if (layout.some(([, , , cls]) => cls.startsWith('dpad'))) root.appendChild(dpad);
+    for (const [id, label, action, cls, caption, badge] of layout) {
       const element = document.createElement('div');
       element.className = 'touch-button ' + cls;
       element.dataset.control = id;
@@ -295,8 +341,15 @@ const HaloInput = (() => {
       if (label) {
         const glyph = document.createElement('span');
         glyph.className = 'glyph';
-        glyph.textContent = label;
+        if (label.icon) glyph.innerHTML = icon(label.icon);
+        else glyph.textContent = label;
         element.appendChild(glyph);
+      }
+      if (badge) {
+        const mark = document.createElement('span');
+        mark.className = 'badge badge-' + badge.toLowerCase();
+        mark.textContent = badge;
+        element.appendChild(mark);
       }
       if (caption) {
         const hint = document.createElement('span');
@@ -344,12 +397,13 @@ const HaloInput = (() => {
           }
           continue;
         }
-        if (touch.clientX < window.innerWidth * 0.4 && stick.id === null) {
+        if (touch.clientX < window.innerWidth * (layoutKey === 'modern' ? 0.45 : 0.4) && stick.id === null) {
           stick.id = touch.identifier;
           stick.x = touch.clientX;
           stick.y = touch.clientY;
-          stick.element.style.left = (touch.clientX - 64) + 'px';
-          stick.element.style.top = (touch.clientY - 64) + 'px';
+          const half = stick.element.offsetWidth / 2 || 64;
+          stick.element.style.left = (touch.clientX - half) + 'px';
+          stick.element.style.top = (touch.clientY - half) + 'px';
           stick.element.style.bottom = 'auto';
           stick.element.classList.add('active');
           held.set(touch.identifier, { kind: 'stick' });
@@ -421,7 +475,7 @@ const HaloInput = (() => {
 
   // ---------- setup
 
-  function attach({ memory, base, offsets, canvas, touchRoot, touch }) {
+  function attach({ memory, base, offsets, canvas, touchRoot, touch, touchLayout }) {
     const buffer = memory.buffer;
     shared = { i32: new Int32Array(buffer), f32: new Float32Array(buffer), base, offsets, ids: [] };
     window.addEventListener('keydown', (event) => onKey(event, true));
@@ -431,7 +485,7 @@ const HaloInput = (() => {
     attachMouse(canvas);
     touchEnabled = touch;
     if (touch) {
-      buildTouchControls(touchRoot);
+      buildTouchControls(touchRoot, touchLayout);
       touchUsed = true;
     }
   }

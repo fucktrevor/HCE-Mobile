@@ -64,10 +64,22 @@ without use: install the app to keep it.
 
 - A controller that the browser knows (Xbox, PlayStation, MFi, Switch Pro):
   as on Android. The browser sees a controller only after a button is pushed.
-- Touch: the left half of the screen is a stick for moving; drag on the right
-  half to aim; the buttons are the controller's. The touch controls hide
-  while a controller is connected. *Settings and data* sets the aim
-  sensitivity, or turns the touch controls off.
+- Touch, in one of two layouts (*Settings and data* > *Touch layout*):
+  - *Modern* (the default), as in mobile shooters: a large fire button
+    under the right thumb that also aims while held, the other actions as
+    icons around it (zoom, melee, reload, grenade and grenade type, weapon
+    swap, crouch, jump, flashlight), a second fire button above the stick,
+    and pause and score at the top. In the menus, the stick moves the
+    selection, and Jump and Melee (marked A and B) select and go back.
+  - *Original Xbox controller*: the Controller S, with A, B, X and Y, the
+    white and black buttons, the triggers, back and start, the d-pad and
+    the stick clicks.
+
+  In both, a touch anywhere on the left side is a stick for moving, and a
+  drag on the right side aims. The touch controls hide while a controller
+  is connected. *Settings and data* sets the aim sensitivity, or turns the
+  touch controls off. A press counts once even when it is shorter than one
+  of the game's frames (`web_gamepad.pressed`).
 - A keyboard and mouse (iPad or computer): as on Linux. Click the game to lock
   the pointer; Esc releases it.
 
