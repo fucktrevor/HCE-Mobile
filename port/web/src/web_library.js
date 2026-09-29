@@ -45,7 +45,8 @@ addToLibrary({
           else if (name == 'texImage3D' || name == 'texSubImage3D') bytes = (name == 'texImage3D' ? a[3] * a[4] * a[5] : a[5] * a[6] * a[7]) * 4;
           else if (name == 'compressedTexImage2D' || name == 'compressedTexSubImage2D') bytes = a[a.length - 1] || 0;
           else if (name.startsWith('uniform') && name.endsWith('v')) bytes = (a[3] || 0) * 4;
-          webHalo.bytes = (webHalo.bytes || 0) + (bytes || 0);
+          if (!(bytes > 0)) bytes = 0;
+          webHalo.bytes = (webHalo.bytes || 0) + bytes;
           webHalo.bytesBy[name] = (webHalo.bytesBy[name] || 0) + (bytes || 0);
           time[name] = (time[name] || 0) + performance.now() - start;
           return result;

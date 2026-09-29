@@ -515,6 +515,13 @@ Sint16 SDL_GetGamepadAxis(SDL_Gamepad *gamepad, SDL_GamepadAxis axis)
 	if (!pad || !pad->connected || axis < 0 || axis >= 6)
 		return 0;
 	value = pad->axes[axis];
+	if (axis >= SDL_GAMEPAD_AXIS_LEFT_TRIGGER)
+	{
+		uint32_t bit = axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? 1u << 30 : 1u << 31;
+
+		if (__atomic_fetch_and(&pad->pressed, ~bit, __ATOMIC_SEQ_CST) & bit)
+			value = 32767;
+	}
 	if (value < -32768)
 		value = -32768;
 	if (value > 32767)
@@ -526,8 +533,11 @@ bool SDL_GetGamepadButton(SDL_Gamepad *gamepad, SDL_GamepadButton button)
 {
 	struct web_gamepad *pad = gamepad_slot(gamepad);
 
-	if (!pad || !pad->connected || button < 0 || button >= 32)
+	if (!pad || !pad->connected || button < 0 || button >= 30)
 		return false;
+	/* a press the game has not seen counts once, even if already released */
+	if (__atomic_fetch_and(&pad->pressed, ~(1u << button), __ATOMIC_SEQ_CST) & (1u << button))
+		return true;
 	return (pad->buttons & (1u << button)) != 0;
 }
 

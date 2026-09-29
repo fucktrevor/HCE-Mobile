@@ -64,6 +64,11 @@ struct web_gamepad
 	int32_t rumble_low, rumble_high; /* written by the game, 0..65535 */
 	int32_t rumble_serial;           /* advanced with each rumble request */
 	int32_t rumble_milliseconds;
+	/* presses the game has not read yet: the page sets a button's bit when
+	it goes down, the game clears it when it reads the button, so a tap
+	between two of the game's frames still counts once (bits 30 and 31: the
+	left and right triggers) */
+	uint32_t pressed;
 };
 
 struct web_shared_state

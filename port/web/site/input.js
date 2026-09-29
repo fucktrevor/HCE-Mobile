@@ -50,7 +50,11 @@ const HaloInput = (() => {
   let lookSensitivity = 1.4;
   const gamepadIds = new Map(); // Gamepad.index -> slot
   let nextGamepadId = 1;
-  const touchPad = { buttons: 0, axes: [0, 0, 0, 0, 0, 0] };
+  // tapped: buttons pressed since the last poll, so a tap between two polls
+  // still counts
+  const touchPad = { buttons: 0, axes: [0, 0, 0, 0, 0, 0], tapped: 0, tappedAxes: [0, 0] };
+  // the buttons and triggers each slot last had, to flag new presses
+  const lastPressed = [];
   const rumbleSeen = [0, 0, 0, 0, 0];
 
   function word(offset) { return (shared.base + offset) >> 2; }
@@ -157,6 +161,12 @@ const HaloInput = (() => {
     i32[base + 2] = type;
     i32[base + 3] = buttons;
     for (let i = 0; i < 6; i++) i32[base + 4 + i] = axes[i];
+    // new presses stay flagged until the game reads them (web_shared.h):
+    // at a low frame rate a tap can begin and end between two of its reads
+    const down = (buttons & 0x3fffffff) | (axes[4] > 16384 ? 1 << 30 : 0) | (axes[5] > 16384 ? 1 << 31 : 0);
+    const fresh = connected ? down & ~(lastPressed[slot] || 0) : 0;
+    lastPressed[slot] = connected ? down : 0;
+    if (fresh) Atomics.or(i32, base + 14, fresh);
     Atomics.store(i32, base, connected ? 1 : 0);
     if (connected && !wasConnected) pushEvent(EVENT.GAMEPAD_ADDED, id);
   }
@@ -224,7 +234,12 @@ const HaloInput = (() => {
     }
     // the touch controls are a controller of their own while no other is
     const touchActive = touchEnabled && touchUsed && physicalCount === 0;
-    writeGamepad(TOUCH_SLOT, touchActive, TOUCH_ID, GAMEPAD_TYPE_XBOXONE, touchPad.buttons, touchPad.axes);
+    const touchAxes = touchPad.axes.slice();
+    if (touchPad.tappedAxes[0]) touchAxes[4] = 32767;
+    if (touchPad.tappedAxes[1]) touchAxes[5] = 32767;
+    writeGamepad(TOUCH_SLOT, touchActive, TOUCH_ID, GAMEPAD_TYPE_XBOXONE, touchPad.buttons | touchPad.tapped, touchAxes);
+    touchPad.tapped = 0;
+    touchPad.tappedAxes[0] = touchPad.tappedAxes[1] = 0;
     document.body.classList.toggle('has-controller', physicalCount > 0);
   }
 
@@ -303,6 +318,9 @@ const HaloInput = (() => {
         if (action.bit !== undefined) buttons |= 1 << action.bit;
         if (action.axis !== undefined) touchPad.axes[action.axis] = 32767;
       }
+      touchPad.tapped |= buttons & ~touchPad.buttons;
+      if (touchPad.axes[4]) touchPad.tappedAxes[0] = 1;
+      if (touchPad.axes[5]) touchPad.tappedAxes[1] = 1;
       touchPad.buttons = buttons;
       for (const id in controls) controls[id].element.classList.toggle('pressed', (buttonState.get(id) || 0) > 0);
     }
