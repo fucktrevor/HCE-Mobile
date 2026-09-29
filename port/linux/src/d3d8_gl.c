@@ -700,11 +700,28 @@ void WINAPI D3DDevice_BlockUntilVerticalBlank(void)
 
 /* ---------- GL helpers */
 
+#ifdef HALO_WEB
+/* port/web/src/web_shader_cache.c */
+void web_shader_cache_prewarm(void);
+GLuint web_shader_cache_find(GLenum type, const char *source, unsigned long long *hash);
+void web_shader_cache_record_shader(GLuint shader, GLenum type, unsigned long long hash, const char *source);
+GLuint web_shader_cache_program(GLuint vertex_shader, GLuint fragment_shader);
+void web_shader_cache_record_program(GLuint vertex_shader, GLuint fragment_shader, GLuint program);
+#endif
+
 static GLuint compile_shader(GLenum type, const char *source, const char *what)
 {
-	GLuint shader = glCreateShader(type);
+	GLuint shader;
 	GLint status = 0;
+#ifdef HALO_WEB
+	unsigned long long hash;
 
+	/* compiled while the game started, from the shaders it used before */
+	shader = web_shader_cache_find(type, source, &hash);
+	if (shader)
+		return shader;
+#endif
+	shader = glCreateShader(type);
 	glShaderSource(shader, 1, &source, NULL);
 	glCompileShader(shader);
 	glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
@@ -717,6 +734,9 @@ static GLuint compile_shader(GLenum type, const char *source, const char *what)
 		glDeleteShader(shader);
 		return 0;
 	}
+#ifdef HALO_WEB
+	web_shader_cache_record_shader(shader, type, hash, source);
+#endif
 	return shader;
 }
 
@@ -971,6 +991,9 @@ static void gl_initialize(void)
 	debug_settings.dump_shaders = *config_string("debug.gpu_dump_shaders") ?
 		config_string("debug.gpu_dump_shaders") : NULL;
 	debug_settings.statistics = config_boolean("debug.gpu_stats");
+#ifdef HALO_WEB
+	web_shader_cache_prewarm();
+#endif
 	xgpu_gl_state_invalidate();
 	device.gl_ready = TRUE;
 }
@@ -1909,19 +1932,29 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 	if (!vertex_shader || !fragment_shader)
 		return NULL;
 
-	entry->program = glCreateProgram();
-	glAttachShader(entry->program, vertex_shader);
-	glAttachShader(entry->program, fragment_shader);
-	glLinkProgram(entry->program);
-	glGetProgramiv(entry->program, GL_LINK_STATUS, &status);
-	if (!status)
+#ifdef HALO_WEB
+	/* linked while the game started (web_shader_cache.c) */
+	entry->program = web_shader_cache_program(vertex_shader, fragment_shader);
+	if (!entry->program)
+#endif
 	{
-		char log[4096];
+		entry->program = glCreateProgram();
+		glAttachShader(entry->program, vertex_shader);
+		glAttachShader(entry->program, fragment_shader);
+		glLinkProgram(entry->program);
+		glGetProgramiv(entry->program, GL_LINK_STATUS, &status);
+		if (!status)
+		{
+			char log[4096];
 
-		glGetProgramInfoLog(entry->program, sizeof(log), NULL, log);
-		platform_log("cannot link a shader program: %s", log);
-		entry->program = 0;
-		return NULL;
+			glGetProgramInfoLog(entry->program, sizeof(log), NULL, log);
+			platform_log("cannot link a shader program: %s", log);
+			entry->program = 0;
+			return NULL;
+		}
+#ifdef HALO_WEB
+		web_shader_cache_record_program(vertex_shader, fragment_shader, entry->program);
+#endif
 	}
 	state_program(entry->program);
 	entry->constants = glGetUniformLocation(entry->program, "c");

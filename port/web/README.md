@@ -194,9 +194,18 @@ these differences for WebGL 2 (`#ifdef HALO_WEB` in `xbox_textures.c` and
   another process, and each call costs a message: this takes the menus from
   about 2,300 calls a frame to 700.
 
+WebGL cannot keep compiled shaders, and a browser compiles one the first
+time a draw needs it; Safari translates each to Metal in another process,
+and the draw waits. `src/web_shader_cache.c` records the source of each
+shader the renderer compiles and each pair it links in `shader-cache.txt`,
+next to `maps`. When the game starts, it compiles and links all of them at
+once (in parallel with `KHR_parallel_shader_compile`), so an effect, menu
+or map that was seen before does not stutter the first time it shows again.
+
 The Xbox memory cannot be write-protected in WebAssembly. The memory watch
 (`src/web_memory_watch.c`) keeps a hash of each page the renderer caches, and
-a changed hash counts as a write. Textures of 128 KB or less, which the game
+a changed hash counts as a write. A page is hashed at most once a frame,
+unless it has been seen to change. Textures of 128 KB or less, which the game
 rewrites between draws (the text renderer's character cache), are checked at
 every use; larger ones change through file reads, which announce themselves.
 
