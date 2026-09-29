@@ -284,7 +284,11 @@ void error(
 			bss_0031df2c.error_count = 0;
 		}
 		bss_0031df2c.last_error_time = time;
+#ifdef HALO_WEB
+		if (FALSE)
+#else
 		if (bss_0031df2c.error_count == 10)
+#endif
 		{
 			terminal_printf(
 				global_real_argb_white,
@@ -314,7 +318,13 @@ void error(
 			va_end(argument_list);
 			csstrcat(string, "\r\n");
 
+#ifdef HALO_WEB
+			/* the web build keeps the game's own notes (no movies, no last
+			profile yet) in debug.txt, off the screen */
+			if (priority != _error_log && priority != _error_silent)
+#else
 			if (priority != _error_log)
+#endif
 			{
 				terminal_printf(global_real_argb_white, "%s", string);
 			}
