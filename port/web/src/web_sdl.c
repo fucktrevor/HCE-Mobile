@@ -295,6 +295,39 @@ bool SDL_GL_SetSwapInterval(int interval)
 	return true;
 }
 
+/* where each frame's time goes, for the page's frame rate view (Settings:
+Show the frame rate): the game's work until it presents, presenting (the
+frame taken out of the canvas and posted), and waiting for the display */
+static void frame_timing(double presenting, double presented, double waited)
+{
+	static double frame_start, work, present, wait, window_start;
+	static int frames;
+
+	if (frame_start)
+	{
+		work += presenting - frame_start;
+		present += presented - presenting;
+		wait += waited - presented;
+		frames++;
+	}
+	else
+	{
+		window_start = waited;
+	}
+	frame_start = waited;
+	if (frames && waited - window_start >= 1000.0)
+	{
+		char text[128];
+
+		snprintf(text, sizeof(text), "game %.1f ms \xc2\xb7 present %.1f ms \xc2\xb7 wait %.1f ms",
+			work / frames, present / frames, wait / frames);
+		web_js_post(6, text);
+		work = present = wait = 0;
+		frames = 0;
+		window_start = waited;
+	}
+}
+
 bool SDL_GL_SwapWindow(SDL_Window *window)
 {
 	int width, height;
@@ -302,7 +335,10 @@ bool SDL_GL_SwapWindow(SDL_Window *window)
 	(void)window;
 	if (!gl_context)
 		return false;
+	double presenting = emscripten_get_now(), presented;
+
 	web_js_gl_present();
+	presented = emscripten_get_now();
 	__atomic_add_fetch(&shared_state.frames_presented, 1, __ATOMIC_SEQ_CST);
 
 	/* the next frame waits for the page's next animation frame, as a swap
@@ -322,6 +358,7 @@ bool SDL_GL_SwapWindow(SDL_Window *window)
 		}
 		last_frame_counter = counter;
 	}
+	frame_timing(presenting, presented, emscripten_get_now());
 
 	/* the page's canvas changed size (rotation, resizing): so does the
 	drawing buffer, between frames */

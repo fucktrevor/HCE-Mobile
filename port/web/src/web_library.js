@@ -28,6 +28,7 @@ addToLibrary({
     calls: null,
     callTime: null,
     frames: 0,
+    bytesBy: {},
     countCalls(context) {
       var calls = webHalo.calls = {};
       var time = webHalo.callTime = {};
@@ -38,6 +39,14 @@ addToLibrary({
           var start = performance.now();
           var result = method.apply(context, arguments);
           calls[name] = (calls[name] || 0) + 1;
+          var a = arguments, bytes = 0;
+          if (name == 'bufferSubData' || name == 'bufferData') bytes = typeof a[4] == 'number' ? a[4] : (a[2] && a[2].byteLength) || 0;
+          else if (name == 'texImage2D' || name == 'texSubImage2D') bytes = (name == 'texImage2D' ? a[3] * a[4] : a[4] * a[5]) * 4;
+          else if (name == 'texImage3D' || name == 'texSubImage3D') bytes = (name == 'texImage3D' ? a[3] * a[4] * a[5] : a[5] * a[6] * a[7]) * 4;
+          else if (name == 'compressedTexImage2D' || name == 'compressedTexSubImage2D') bytes = a[a.length - 1] || 0;
+          else if (name.startsWith('uniform') && name.endsWith('v')) bytes = (a[3] || 0) * 4;
+          webHalo.bytes = (webHalo.bytes || 0) + (bytes || 0);
+          webHalo.bytesBy[name] = (webHalo.bytesBy[name] || 0) + (bytes || 0);
           time[name] = (time[name] || 0) + performance.now() - start;
           return result;
         };
@@ -49,7 +58,9 @@ addToLibrary({
       for (var name in calls) { total += calls[name]; totalTime += time[name]; }
       var top = Object.keys(calls).sort((a, b) => calls[b] - calls[a]).filter((name) => calls[name])
         .map((name) => `${name} ${(calls[name] / 120).toFixed(0)} ${(time[name] / 120).toFixed(2)}ms`);
-      webHalo.post('haloMessage', [0, `GL per frame: ${(total / 120).toFixed(0)} calls ${(totalTime / 120).toFixed(2)}ms; ` + top.join(', ')]);
+      var by = Object.keys(webHalo.bytesBy).filter((n) => webHalo.bytesBy[n]).map((n) => `${n} ${(webHalo.bytesBy[n] / 120 / 1024).toFixed(0)}K`).join(', ');
+      webHalo.post('haloMessage', [0, `GL per frame: ${((webHalo.bytes || 0) / 120 / 1024).toFixed(0)} KB (${by}); ${(total / 120).toFixed(0)} calls ${(totalTime / 120).toFixed(2)}ms; ` + top.join(', ')]);
+      webHalo.bytes = 0; webHalo.bytesBy = {};
       for (var name in calls) { calls[name] = 0; time[name] = 0; }
     },
   },
@@ -109,7 +120,7 @@ addToLibrary({
     webHalo.post('haloPresent', [bitmap], [bitmap]);
   },
 
-  // kind: 0 status, 1 notice, 2 clipboard text, 3 fatal error
+  // kind: 0 status, 1 notice, 2 clipboard text, 3 fatal error, 6 frame timing
   web_js_post__deps: ['$webHalo'],
   web_js_post: (kind, text) => {
     webHalo.post('haloMessage', [kind, UTF8ToString(text)]);

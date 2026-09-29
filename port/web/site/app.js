@@ -36,7 +36,7 @@ can run the game, copies the game data out of the player's disc image
   // ---------- settings (this browser's; nothing else depends on them)
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
-  const settings = { touch: coarsePointer, look: 1.4, vsync: true, glDebug: false, frameRate: false };
+  const settings = { touch: coarsePointer, look: 1.4, vsync: true, glDebug: false, showTiming: true };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
@@ -383,7 +383,8 @@ can run the game, copies the game data out of the player's disc image
       const now = performance.now();
       const seconds = (now - last) / 1000;
       const shown = (state.presented || 0) - frames;
-      view.textContent = `${Math.round(shown / seconds)} fps · display ${Math.round(ticks / seconds)} Hz`;
+      view.textContent = `${Math.round(shown / seconds)} fps · display ${Math.round(ticks / seconds)} Hz` +
+        (state.timing ? `\n${state.timing}` : '');
       frames = state.presented || 0;
       ticks = 0;
       last = now;
@@ -488,6 +489,7 @@ can run the game, copies the game data out of the player's disc image
         else if (kind === 1) toast(text, 5000);
         else if (kind === 2) log('clipboard: ' + text);
         else if (kind === 4) log('thread error: ' + text);
+        else if (kind === 6) state.timing = text;
         else if (kind === 5) {
           log('game: ' + text);
           $('fatal').querySelector('h2').textContent = 'The game quit';
@@ -513,7 +515,7 @@ can run the game, copies the game data out of the player's disc image
         HaloNet.attach({ memory: state.memory, base: state.shared, offsets: state.offsets });
         $('touch').hidden = !settings.touch;
         requestAnimationFrame(animationFrame);
-        if (settings.frameRate) showFrameRate();
+        if (settings.showTiming) showFrameRate();
         startAudio();
         log('runtime ready');
       },
@@ -665,8 +667,8 @@ can run the game, copies the game data out of the player's disc image
       HaloInput.setLookSensitivity(settings.look);
     };
     $('opt-vsync').onchange = (event) => { settings.vsync = event.target.checked; saveSettings(); };
-    $('opt-fps').checked = settings.frameRate;
-    $('opt-fps').onchange = (event) => { settings.frameRate = event.target.checked; saveSettings(); };
+    $('opt-fps').checked = settings.showTiming;
+    $('opt-fps').onchange = (event) => { settings.showTiming = event.target.checked; saveSettings(); };
     $('opt-gldebug').checked = settings.glDebug;
     $('opt-gldebug').onchange = (event) => { settings.glDebug = event.target.checked; saveSettings(); };
     $('iso-file').onchange = onImageChosen;

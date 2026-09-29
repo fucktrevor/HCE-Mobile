@@ -414,6 +414,7 @@ body.has-controller .touch-layer { display: none; }
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.55);
   color: #9fe870;
-  font: 600 13px/1.4 ui-monospace, Menlo, monospace;
+  font: 600 12px/1.4 ui-monospace, Menlo, monospace;
+  white-space: pre;
   pointer-events: none;
 }
