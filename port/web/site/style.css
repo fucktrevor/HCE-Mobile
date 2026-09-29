@@ -143,6 +143,22 @@ code { background: #0e1117; padding: 1px 5px; border-radius: 4px; }
   color: var(--text);
   font: inherit;
 }
+.games { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.game {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-edge);
+  background: rgba(255, 255, 255, 0.03);
+}
+.game.chosen { border-color: var(--accent); background: rgba(255, 255, 255, 0.07); }
+.game-pick { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; }
+.game-pick input { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+.game-pick span { display: flex; flex-direction: column; min-width: 0; }
+.game-pick strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-pick small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings { margin-top: 16px; border-top: 1px solid var(--panel-edge); padding-top: 10px; }
 .settings summary { cursor: pointer; color: var(--muted); min-height: 32px; }
 .row { display: flex; gap: 10px; align-items: center; margin: 8px 0; flex-wrap: wrap; }

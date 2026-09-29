@@ -54,6 +54,16 @@ starts (see "Cross-origin isolation").
    app's private storage. The disc image is read in place and not changed.
 4. Push *Play*.
 
+Several disc images can be installed at once (a multiplayer disc, a full
+game, a modded one): *Add another disc image* copies each into its own
+folder, and the list under *Game data* chooses the one *Play* starts, with
+*Rename* and *Delete* for each. The first copy is the `maps` folder at the
+top of the storage; each one added after it is `games/<id>/`, with its
+`maps`, an `info.json` (its name), and its own saved games, `config.toml`,
+`debug.txt` and shader cache: the page passes that folder to the game as
+`HALO_DATA_ROOT` and `HALO_SAVE_ROOT`. Players in an online room need the
+same maps.
+
 The copy is kept in the site's Origin Private File System. The saved games
 (`z:\`, `u:\`) and `config.toml` are there too. *Settings and data* can
 export the saved games as a `.zip` and delete the game data. On iOS, data of
@@ -252,8 +262,10 @@ the game only when it is there.
 
 ## Find problems
 
-*Settings and data* > *Show the frame rate* shows the frames drawn each
-second, and the display's rate, over the game.
+*Settings and data* > *Show the frame rate* shows, over the game, the
+frames drawn each second and the display's rate, where each frame's time
+goes (the game's work, presenting, waiting for the display), the bytes the
+memory watch hashed, and the WebGL calls of each frame and their time.
 
 *Settings and data* > *Show log* shows the page's log and `debug.txt`, the
 game's log, and can copy them for a report. *Log graphics errors* sets

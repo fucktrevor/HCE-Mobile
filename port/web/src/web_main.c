@@ -81,6 +81,9 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 	posix_make_directory("/data/save");
+	/* the chosen copy's saved games (the page names its folder) */
+	if (getenv("HALO_SAVE_ROOT"))
+		posix_make_directory(getenv("HALO_SAVE_ROOT"));
 
 	set_environment("HALO_DATA_ROOT", "/data");
 	set_environment("HALO_SAVE_ROOT", "/data/save");

@@ -113,7 +113,28 @@ async function writeFile(directory, name, source, onChunk) {
   }
 }
 
-async function extract(file) {
+// the folder a copy goes in: [] for the first copy (maps at the top), or
+// ['games', id] for each one added after it
+async function folder(path, create) {
+  let directory = await navigator.storage.getDirectory();
+  for (const name of path) directory = await directory.getDirectoryHandle(name, { create });
+  return directory;
+}
+
+// info.json, beside the copy's maps: its name, where it came from, when
+async function writeInfo(directory, info) {
+  const handle = await directory.getFileHandle('info.json', { create: true });
+  const access = await handle.createSyncAccessHandle();
+  try {
+    await access.truncate(0);
+    await access.write(new TextEncoder().encode(JSON.stringify(info)), { at: 0 });
+    await access.flush();
+  } finally {
+    await access.close();
+  }
+}
+
+async function extract(file, target = [], name = '') {
   const volume = await findVolume(file);
   if (!volume) throw new Error('This file is not an Xbox disc image (no XDVDFS volume was found).');
 
@@ -129,7 +150,7 @@ async function extract(file) {
   }
 
   const total = files.reduce((sum, entry) => sum + entry.size, 0);
-  const storage = await navigator.storage.getDirectory();
+  const storage = await folder(target, true);
   // a new copy replaces whatever an earlier, perhaps interrupted, one left
   await storage.removeEntry('maps', { recursive: true }).catch(() => {});
   const directory = await storage.getDirectoryHandle('maps', { create: true });
@@ -155,12 +176,22 @@ async function extract(file) {
   await access.write(new TextEncoder().encode(JSON.stringify({ files: files.map((f) => f.name), bytes: total })), { at: 0 });
   await access.flush();
   await access.close();
+  if (target.length) await writeInfo(storage, { name, source: file.name, added: Date.now() });
   return { files: files.length, bytes: total };
 }
 
 onmessage = async (event) => {
+  const message = event.data;
   try {
-    const result = await extract(event.data.file);
+    if (message.op === 'rename') {
+      const directory = await folder(message.target, false);
+      let info = {};
+      try { info = JSON.parse(await (await (await directory.getFileHandle('info.json')).getFile()).text()); } catch { /* none */ }
+      await writeInfo(directory, { ...info, name: message.name });
+      postMessage({ type: 'done' });
+      return;
+    }
+    const result = await extract(message.file, message.target || [], message.name || '');
     postMessage({ type: 'done', ...result });
   } catch (error) {
     postMessage({ type: 'error', message: error && error.message ? error.message : String(error) });

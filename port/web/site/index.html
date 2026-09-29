@@ -39,13 +39,16 @@
         (or <em>Add to Home screen</em>).</span>
     </div>
 
-    <div id="step-data" class="step" hidden>
+    <div id="step-data" class="step">
       <h2>Game data</h2>
-      <p>The game needs the <code>maps</code> folder of your own Xbox disc image of Halo: Combat Evolved
+      <p id="data-intro">The game needs the <code>maps</code> folder of your own Xbox disc image of Halo: Combat Evolved
         (<code>.iso</code> or <code>.xiso</code>, any version). It is copied into this app's private storage
-        (about 1.8 GB); the disc image itself can be deleted afterwards. Nothing is uploaded anywhere.</p>
-      <label class="button primary" for="iso-file">Choose disc image…</label>
+        (up to 1.8 GB); the disc image itself can be deleted afterwards. Nothing is uploaded anywhere.</p>
+      <div id="games" class="games" role="radiogroup" aria-label="Copies of the game"></div>
+      <label class="button primary" id="add-label" for="iso-file">Choose disc image…</label>
       <input id="iso-file" type="file" accept=".iso,.xiso,application/octet-stream,application/x-iso9660-image" hidden>
+      <p class="small">Add as many disc images as you like (a multiplayer disc, a full game, a modded one) and pick
+        the one to play. Each keeps its own saved games.</p>
       <div id="progress" class="progress" hidden>
         <div class="bar"><div id="progress-fill"></div></div>
         <p id="progress-text"></p>
@@ -95,7 +98,7 @@
       <div class="row buttons">
         <button type="button" class="button" id="export-saves">Export saved games</button>
         <button type="button" class="button" id="show-log">Show log</button>
-        <button type="button" class="button danger" id="delete-data">Delete game data</button>
+        <button type="button" class="button danger" id="delete-data">Delete all game data</button>
       </div>
       <p class="small" id="storage-summary"></p>
       <p class="small" id="version"></p>

@@ -31,12 +31,14 @@ can run the game, copies the game data out of the player's disc image
     log: [],
     wakeLock: null,
     version: null,
+    games: [],       // the installed copies of the game (listGames)
+    importing: null, // the id of the copy being imported
   };
 
   // ---------- settings (this browser's; nothing else depends on them)
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
-  const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: true };
+  const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: false };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
@@ -155,54 +157,178 @@ can run the game, copies the game data out of the player's disc image
 
   // ---------- game data
 
-  async function mapsState() {
+  // Several copies of the game can be installed, each from its own disc
+  // image (a multiplayer disc, a full game, a modded one), and one is chosen
+  // to play. The first copy is the "maps" folder at the top of the storage
+  // (as before); each one added after it is games/<id>/, with its maps, an
+  // info.json (its name), its saved games and its shader cache. The game
+  // takes the chosen copy's folder as its data root (src/web_main.c).
+  const CAMPAIGN_MAPS = ['a10.map', 'a30.map', 'b30.map', 'c10.map', 'd40.map'];
+
+  async function readJson(directory, name) {
     try {
-      const root = await navigator.storage.getDirectory();
-      const maps = await root.getDirectoryHandle('maps');
-      const marker = await (await maps.getFileHandle('.complete')).getFile();
-      return JSON.parse(await marker.text());
+      return JSON.parse(await (await (await directory.getFileHandle(name)).getFile()).text());
     } catch {
       return null;
     }
   }
 
-  function showSteps(maps) {
-    $('step-data').hidden = !!maps;
-    $('step-play').hidden = !maps;
-    if (maps) {
-      $('data-summary').textContent = `Game data: ${maps.files.length} maps, ${(maps.bytes / 1e9).toFixed(2)} GB.`;
+  async function listGames() {
+    const games = [];
+    let root;
+    try {
+      root = await navigator.storage.getDirectory();
+    } catch {
+      return games;
     }
+    try {
+      const complete = await readJson(await root.getDirectoryHandle('maps'), '.complete');
+      if (complete) {
+        games.push({ id: 'default', name: (settings.gameNames && settings.gameNames.default) || 'Halo',
+          files: complete.files, bytes: complete.bytes, added: 0, path: [], dataRoot: '/data' });
+      }
+    } catch { /* no first copy */ }
+    try {
+      const folder = await root.getDirectoryHandle('games');
+      for await (const [id, handle] of folder.entries()) {
+        if (handle.kind !== 'directory' || id === state.importing) continue;
+        let complete = null;
+        try { complete = await readJson(await handle.getDirectoryHandle('maps'), '.complete'); } catch { /* none */ }
+        if (!complete) {
+          // a copy that did not finish: its space back
+          await folder.removeEntry(id, { recursive: true }).catch(() => {});
+          continue;
+        }
+        const info = (await readJson(handle, 'info.json')) || {};
+        games.push({ id, name: info.name || 'Halo', source: info.source, files: complete.files, bytes: complete.bytes,
+          added: info.added || 0, path: ['games', id], dataRoot: '/data/games/' + id });
+      }
+    } catch { /* none added */ }
+    games.sort((a, b) => a.added - b.added);
+    return games;
   }
 
-  function extract(file) {
+  function describeGame(game) {
+    const names = (game.files || []).map((name) => name.toLowerCase());
+    const campaign = CAMPAIGN_MAPS.some((name) => names.includes(name));
+    return `${campaign ? 'Campaign and multiplayer' : 'Multiplayer only'} · ${names.length} maps · ${(game.bytes / 1e9).toFixed(2)} GB`;
+  }
+
+  function selectedGame() {
+    return state.games.find((game) => game.id === settings.game) || state.games[0] || null;
+  }
+
+  async function refreshGames() {
+    state.games = await listGames();
+    const list = $('games');
+    list.textContent = '';
+    const chosen = selectedGame();
+    for (const game of state.games) {
+      const row = document.createElement('div');
+      row.className = 'game' + (chosen && game.id === chosen.id ? ' chosen' : '');
+      const pick = document.createElement('label');
+      pick.className = 'game-pick';
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'game';
+      radio.checked = !!(chosen && game.id === chosen.id);
+      radio.onchange = () => { settings.game = game.id; saveSettings(); refreshGames(); };
+      const text = document.createElement('span');
+      text.innerHTML = '<strong></strong><small></small>';
+      text.querySelector('strong').textContent = game.name;
+      text.querySelector('small').textContent = describeGame(game) + (game.source ? ` · ${game.source}` : '');
+      pick.append(radio, text);
+      const rename = document.createElement('button');
+      rename.type = 'button';
+      rename.className = 'button small-button';
+      rename.textContent = 'Rename';
+      rename.onclick = () => renameGame(game);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'button small-button danger';
+      remove.textContent = 'Delete';
+      remove.onclick = () => deleteGame(game);
+      row.append(pick, rename, remove);
+      list.appendChild(row);
+    }
+    const any = state.games.length > 0;
+    $('step-play').hidden = !any;
+    $('data-intro').hidden = any;
+    $('add-label').textContent = any ? 'Add another disc image…' : 'Choose disc image…';
+    $('add-label').classList.toggle('primary', !any);
+    if (chosen) $('data-summary').textContent = `Plays ${chosen.name}.`;
+  }
+
+  function workerTask(message, onProgress) {
     return new Promise((resolve, reject) => {
       const worker = new Worker('xiso-worker.js');
-      const started = Date.now();
-      $('progress').hidden = false;
       worker.onmessage = (event) => {
-        const message = event.data;
-        if (message.type === 'progress') {
-          const fraction = message.total ? message.done / message.total : 0;
-          $('progress-fill').style.width = (fraction * 100).toFixed(1) + '%';
-          const seconds = (Date.now() - started) / 1000;
-          const rate = message.done / Math.max(seconds, 0.1);
-          const left = rate > 0 ? (message.total - message.done) / rate : 0;
-          $('progress-text').textContent = `Copying maps/${message.file}: ` +
-            `${(message.done / 1e9).toFixed(2)} of ${(message.total / 1e9).toFixed(2)} GB` +
-            (seconds > 3 ? `, about ${Math.ceil(left / 60)} min left` : '');
-        } else if (message.type === 'done') {
+        const reply = event.data;
+        if (reply.type === 'progress') {
+          if (onProgress) onProgress(reply);
+        } else if (reply.type === 'done') {
           worker.terminate();
-          resolve(message);
-        } else if (message.type === 'error') {
+          resolve(reply);
+        } else if (reply.type === 'error') {
           worker.terminate();
-          reject(new Error(message.message));
+          reject(new Error(reply.message));
         }
       };
       worker.onerror = (event) => {
         worker.terminate();
         reject(new Error(event.message || 'The copy stopped.'));
       };
-      worker.postMessage({ file });
+      worker.postMessage(message);
+    });
+  }
+
+  async function renameGame(game) {
+    const name = (prompt('Name this copy of the game:', game.name) || '').trim().slice(0, 60);
+    if (!name || name === game.name) return;
+    if (game.id === 'default') {
+      settings.gameNames = { ...(settings.gameNames || {}), default: name };
+      saveSettings();
+    } else {
+      try {
+        await workerTask({ op: 'rename', target: game.path, name });
+      } catch (error) {
+        toast('Cannot rename it: ' + error.message);
+      }
+    }
+    refreshGames();
+  }
+
+  async function deleteGame(game) {
+    if (!confirm(`Delete ${game.name} (${(game.bytes / 1e9).toFixed(2)} GB)? Its saved games go with it.`)) return;
+    try {
+      const root = await navigator.storage.getDirectory();
+      if (game.id === 'default') {
+        await root.removeEntry('maps', { recursive: true });
+      } else {
+        await (await root.getDirectoryHandle('games')).removeEntry(game.id, { recursive: true });
+      }
+    } catch (error) {
+      log('delete: ' + error);
+    }
+    if (settings.game === game.id) {
+      settings.game = null;
+      saveSettings();
+    }
+    refreshGames();
+  }
+
+  function extract(file, target, name) {
+    const started = Date.now();
+    $('progress').hidden = false;
+    return workerTask({ file, target, name }, (message) => {
+      const fraction = message.total ? message.done / message.total : 0;
+      $('progress-fill').style.width = (fraction * 100).toFixed(1) + '%';
+      const seconds = (Date.now() - started) / 1000;
+      const rate = message.done / Math.max(seconds, 0.1);
+      const left = rate > 0 ? (message.total - message.done) / rate : 0;
+      $('progress-text').textContent = `Copying maps/${message.file}: ` +
+        `${(message.done / 1e9).toFixed(2)} of ${(message.total / 1e9).toFixed(2)} GB` +
+        (seconds > 3 ? `, about ${Math.ceil(left / 60)} min left` : '');
     });
   }
 
@@ -211,23 +337,32 @@ can run the game, copies the game data out of the player's disc image
     event.target.value = '';
     if (!file) return;
     if (state.freeBytes !== undefined && state.freeBytes < REQUIRED_BYTES) {
-      toast('There may not be enough free storage for the game data (about 1.8 GB).', 6000);
+      toast('There may not be enough free storage for another copy of the game (up to 1.8 GB).', 6000);
     }
     if (navigator.storage && navigator.storage.persist) {
       // keep the data when the device runs low on space
       navigator.storage.persist().catch(() => {});
     }
+    // the first copy keeps its place at the top; the others each have a folder
+    const first = !state.games.length;
+    const id = first ? 'default' : Date.now().toString(36);
+    const name = file.name.replace(/\.(x?iso)$/i, '').replace(/[_]+/g, ' ').trim().slice(0, 60) || 'Halo';
     $('iso-file').disabled = true;
+    state.importing = id;
     try {
-      const result = await extract(file);
+      const result = await extract(file, first ? [] : ['games', id], name);
       log(`extracted ${result.files} files, ${result.bytes} bytes`);
       $('progress-text').textContent = 'Done.';
-      showSteps(await mapsState());
+      if (first) settings.gameNames = { ...(settings.gameNames || {}), default: name };
+      settings.game = id;
+      saveSettings();
     } catch (error) {
       $('progress-text').textContent = error.message;
       log('extraction failed: ' + error.message);
     } finally {
+      state.importing = null;
       $('iso-file').disabled = false;
+      refreshGames();
     }
   }
 
@@ -296,7 +431,9 @@ can run the game, copies the game data out of the player's disc image
       }
     }
     try {
-      const root = await navigator.storage.getDirectory();
+      let root = await navigator.storage.getDirectory();
+      const game = selectedGame();
+      for (const name of (game ? game.path : [])) root = await root.getDirectoryHandle(name);
       await walk(await root.getDirectoryHandle('save'), 'save/');
       try {
         const config = await (await root.getFileHandle('config.toml')).getFile();
@@ -308,7 +445,8 @@ can run the game, copies the game data out of the player's disc image
     }
     const link = document.createElement('a');
     link.href = URL.createObjectURL(zip(files));
-    link.download = 'halo-saves.zip';
+    const game = selectedGame();
+    link.download = `halo-saves${game && game.id !== 'default' ? '-' + game.name.replace(/[^\w-]+/g, '-') : ''}.zip`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -316,12 +454,16 @@ can run the game, copies the game data out of the player's disc image
   }
 
   async function deleteData() {
-    if (!confirm('Delete the game data (the maps folder)? Saved games are kept.')) return;
+    if (!state.games.length) return;
+    if (!confirm('Delete every copy of the game and the saved games of the copies added after the first?')) return;
     try {
       const root = await navigator.storage.getDirectory();
-      await root.removeEntry('maps', { recursive: true });
+      await root.removeEntry('maps', { recursive: true }).catch(() => {});
+      await root.removeEntry('games', { recursive: true }).catch(() => {});
     } catch { /* already gone */ }
-    showSteps(await mapsState());
+    settings.game = null;
+    saveSettings();
+    refreshGames();
   }
 
   // ---------- the running game
@@ -468,6 +610,11 @@ can run the game, copies the game data out of the player's disc image
     const context = canvas.getContext('bitmaprenderer');
     // (tests pass extra --NAME=value settings in window.__haloArgs)
     const argumentsList = Array.isArray(window.__haloArgs) ? window.__haloArgs.slice() : [];
+    const game = selectedGame();
+    if (game && game.id !== 'default') {
+      argumentsList.push('--HALO_DATA_ROOT=' + game.dataRoot, '--HALO_SAVE_ROOT=' + game.dataRoot + '/save');
+    }
+    log('playing ' + (game ? `${game.name} (${game.dataRoot})` : 'nothing'));
     if (!settings.vsync) argumentsList.push('--HALO_NO_VSYNC=1');
     if (settings.glDebug) argumentsList.push('--HALO_GL_DEBUG=1');
     // the frame rate view also counts the WebGL calls and their time
@@ -723,7 +870,7 @@ can run the game, copies the game data out of the player's disc image
     setUpOnline();
     const ok = await runChecks();
     if (!ok) return;
-    showSteps(await mapsState());
+    await refreshGames();
     checkForUpdate();
   }
 
