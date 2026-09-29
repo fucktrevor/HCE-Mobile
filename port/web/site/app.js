@@ -423,12 +423,18 @@ can run the game, copies the game data out of the player's disc image
     return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
   }
 
+  const MAP_CACHE = /^save\/z\/cache\d+\.map$/i;
+
   async function exportSaves() {
     const files = [];
     async function walk(directory, prefix) {
       for await (const [name, handle] of directory.entries()) {
         if (handle.kind === 'directory') await walk(handle, prefix + name + '/');
-        else files.push({ name: prefix + name, bytes: new Uint8Array(await (await handle.getFile()).arrayBuffer()) });
+        // not z:\cacheNNN.map, the game's cache of maps (hundreds of MB),
+        // which it builds again from the maps
+        else if (!MAP_CACHE.test(prefix + name)) {
+          files.push({ name: prefix + name, bytes: new Uint8Array(await (await handle.getFile()).arrayBuffer()) });
+        }
       }
     }
     try {
@@ -505,7 +511,9 @@ can run the game, copies the game data out of the player's disc image
       for (const { name, bytes } of entries) {
         const parts = name.split('/').filter((part) => part && part !== '.' && part !== '..');
         const at = parts.indexOf('save');
-        if (at >= 0 && parts.length > at + 1) files.push({ path: parts.slice(at), bytes });
+        if (at >= 0 && parts.length > at + 1) {
+          if (!MAP_CACHE.test(parts.slice(at).join('/'))) files.push({ path: parts.slice(at), bytes });
+        }
         else if (parts[parts.length - 1] === 'config.toml') files.push({ path: ['config.toml'], bytes });
       }
       if (!files.some((f) => f.path[0] === 'save')) throw new Error('The .zip file has no save folder in it.');
