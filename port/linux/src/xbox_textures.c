@@ -670,6 +670,12 @@ struct texture_entry
 	unsigned long address, size;
 	unsigned long generation;
 	unsigned long last_used_frame;
+#ifdef HALO_WEB
+	/* the frame it was last hashed in, and whether it was seen to change
+	after its first upload (web_memory_watch.c) */
+	unsigned long checked_frame;
+	BOOL rewritten;
+#endif
 };
 
 #define TEXTURE_BUCKET_COUNT 4096
@@ -738,10 +744,13 @@ GLuint xgpu_texture_get(const DWORD *resource, const D3DCOLOR *palette, GLenum *
 #ifdef HALO_WEB
 		/* without page protection a write is only seen by hashing
 		(port/web/src/web_memory_watch.c): small textures, which the game
-		rewrites between draws (the text renderer's character cache), are
-		checked at every lookup; large ones change through file reads, which
-		announce themselves */
-		&& recent_textures[recent].entry->size > WEB_CHECKED_TEXTURE_BYTES
+		may rewrite between draws (the text renderer's character cache), are
+		checked once a frame, and at every lookup once one has been seen to
+		change; large ones change through file reads, which announce
+		themselves */
+		&& (recent_textures[recent].entry->size > WEB_CHECKED_TEXTURE_BYTES ||
+			(!recent_textures[recent].entry->rewritten &&
+			recent_textures[recent].entry->checked_frame == texture_frame))
 #endif
 		)
 	{
@@ -790,7 +799,18 @@ GLuint xgpu_texture_get(const DWORD *resource, const D3DCOLOR *palette, GLenum *
 
 	if (no_cache < 0)
 		no_cache = config_boolean("debug.texture_no_cache");
+#ifdef HALO_WEB
+	/* hashed once a frame, unless it has been seen to change */
+	if (entry->generation && !no_cache && !entry->rewritten && entry->checked_frame == texture_frame)
+		generation = entry->generation;
+	else
+#endif
 	generation = memory_watch_generation(entry->address, entry->size);
+#ifdef HALO_WEB
+	entry->checked_frame = texture_frame;
+	if (entry->generation && generation > entry->generation)
+		entry->rewritten = TRUE;
+#endif
 	if (!entry->generation || generation > entry->generation || no_cache)
 	{
 		/* protect first, so a write racing with the upload is noticed */

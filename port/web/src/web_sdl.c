@@ -298,6 +298,9 @@ bool SDL_GL_SetSwapInterval(int interval)
 /* where each frame's time goes, for the page's frame rate view (Settings:
 Show the frame rate): the game's work until it presents, presenting (the
 frame taken out of the canvas and posted), and waiting for the display */
+extern unsigned long long web_memory_watch_hashed_bytes;
+void web_memory_watch_next_frame(void);
+
 static void frame_timing(double presenting, double presented, double waited)
 {
 	static double frame_start, work, present, wait, window_start;
@@ -319,8 +322,10 @@ static void frame_timing(double presenting, double presented, double waited)
 	{
 		char text[128];
 
-		snprintf(text, sizeof(text), "game %.1f ms \xc2\xb7 present %.1f ms \xc2\xb7 wait %.1f ms",
-			work / frames, present / frames, wait / frames);
+		snprintf(text, sizeof(text), "game %.1f ms \xc2\xb7 present %.1f ms \xc2\xb7 wait %.1f ms \xc2\xb7 hash %.1f MB",
+			work / frames, present / frames, wait / frames,
+			(double)web_memory_watch_hashed_bytes / frames / (1024.0 * 1024.0));
+		web_memory_watch_hashed_bytes = 0;
 		web_js_post(6, text);
 		work = present = wait = 0;
 		frames = 0;
@@ -339,6 +344,7 @@ bool SDL_GL_SwapWindow(SDL_Window *window)
 
 	web_js_gl_present();
 	presented = emscripten_get_now();
+	web_memory_watch_next_frame();
 	__atomic_add_fetch(&shared_state.frames_presented, 1, __ATOMIC_SEQ_CST);
 
 	/* the next frame waits for the page's next animation frame, as a swap

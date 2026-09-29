@@ -6,8 +6,8 @@ Write tracking for guest memory that the renderer caches
 
 WebAssembly memory has no page protection, so a write cannot fault. A
 watched page instead remembers a hash of its contents: asking for its
-generation hashes it again, and a different hash counts as a write, as the
-fault would have. Writes the file layer announces (memory_watch_prepare_write)
+generation hashes it again (at most once a frame, unless the page has been seen to
+change), and a different hash counts as a write, as the fault would have. Writes the file layer announces (memory_watch_prepare_write)
 count at once. The renderer only asks about the pages its draws read, so
 the pages hashed each frame are about the ones the GPU reads anyway.
 */
@@ -23,12 +23,22 @@ the pages hashed each frame are about the ones the GPU reads anyway.
 static unsigned char page_protected[WATCH_PAGE_COUNT];
 static unsigned long page_generation[WATCH_PAGE_COUNT];
 static uint64_t page_hash[WATCH_PAGE_COUNT];
+/* the frame each page was last hashed in, and whether it has been seen to
+change: a page is hashed once a frame, and at every question once it has
+been seen to change (the text renderer rewrites its character cache
+between draws) */
+static unsigned long page_checked_frame[WATCH_PAGE_COUNT];
+static unsigned char page_rewritten[WATCH_PAGE_COUNT];
+static unsigned long watch_frame = 1;
 static volatile unsigned long current_generation = 1;
 
 static unsigned long page_index(unsigned long address)
 {
 	return (address - PLATFORM_CONTIGUOUS_BASE) / WATCH_PAGE_SIZE;
 }
+
+/* bytes hashed, for the frame rate view (web_sdl.c) */
+unsigned long long web_memory_watch_hashed_bytes;
 
 static uint64_t hash_page(unsigned long page)
 {
@@ -37,6 +47,7 @@ static uint64_t hash_page(unsigned long page)
 	uint64_t c = 0x165667b19e3779f9ULL, d = 0x27d4eb2f165667c5ULL;
 	unsigned long index;
 
+	web_memory_watch_hashed_bytes += WATCH_PAGE_SIZE;
 	/* four independent lanes, so the loop vectorises */
 	for (index = 0; index < WATCH_PAGE_SIZE / sizeof(uint64_t); index += 4)
 	{
@@ -85,6 +96,7 @@ void memory_watch_protect(unsigned long address, unsigned long size)
 		{
 			page_hash[page] = hash_page(page);
 			page_protected[page] = 1;
+			page_checked_frame[page] = watch_frame;
 		}
 	}
 }
@@ -97,12 +109,25 @@ unsigned long memory_watch_generation(unsigned long address, unsigned long size)
 		return 0;
 	for (page = first; page <= last; page++)
 	{
-		if (page_protected[page] && hash_page(page) != page_hash[page])
-			mark_written(page);
+		if (page_protected[page] && (page_rewritten[page] || page_checked_frame[page] != watch_frame))
+		{
+			page_checked_frame[page] = watch_frame;
+			if (hash_page(page) != page_hash[page])
+			{
+				mark_written(page);
+				page_rewritten[page] = 1;
+			}
+		}
 		if (page_generation[page] > newest)
 			newest = page_generation[page];
 	}
 	return newest;
+}
+
+/* a new frame: each page may be hashed again (web_sdl.c) */
+void web_memory_watch_next_frame(void)
+{
+	watch_frame++;
 }
 
 unsigned long memory_watch_serial(void)
