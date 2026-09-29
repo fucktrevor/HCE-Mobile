@@ -7,7 +7,8 @@ game through the shared state (port/web/src/web_shared.h):
 - the keyboard and the mouse (with the pointer locked), as SDL events,
   which the Linux port's keyboard-and-mouse controls read
   (port/linux/README.md, "Controls");
-- game controllers, through the Gamepad API's standard mapping;
+- game controllers (Bluetooth or wired), through the Gamepad API: its
+  standard mapping, or the usual order of generic controllers;
 - touch controls for phones and tablets without a controller: a stick for
   moving, dragging for aiming (as the mouse does) and the controller's
   buttons, drawn over the game.
@@ -191,6 +192,66 @@ const HaloInput = (() => {
 
   let physicalCount = 0;
 
+  // A controller's buttons and axes as the game's (SDL's) bits and axes.
+  // Browsers describe most controllers (Xbox, PlayStation, Switch Pro, MFi,
+  // most Android ones, over Bluetooth or a cable) with the "standard"
+  // mapping. For the others, the usual order of generic HID controllers: the
+  // face buttons, the shoulders, the triggers as buttons or as axes 4 and 5,
+  // and the d-pad as buttons 12 to 15, as axes 6 and 7, or as a hat (axis 9).
+  function readGamepad(gamepad) {
+    const b = gamepad.buttons;
+    const a = gamepad.axes;
+    const pressed = (i) => (b[i] ? (b[i].pressed || b[i].value > 0.5) : false);
+    const value = (i) => (b[i] ? Math.max(0, Math.min(1, b[i].value || (b[i].pressed ? 1 : 0))) : 0);
+    let buttons = 0;
+    const map = [
+      [0, BUTTON.SOUTH], [1, BUTTON.EAST], [2, BUTTON.WEST], [3, BUTTON.NORTH], [4, BUTTON.LEFT_SHOULDER],
+      [5, BUTTON.RIGHT_SHOULDER], [8, BUTTON.BACK], [9, BUTTON.START], [10, BUTTON.LEFT_STICK],
+      [11, BUTTON.RIGHT_STICK], [12, BUTTON.DPAD_UP], [13, BUTTON.DPAD_DOWN], [14, BUTTON.DPAD_LEFT],
+      [15, BUTTON.DPAD_RIGHT], [16, BUTTON.GUIDE],
+    ];
+    for (const [index, bit] of map) if (pressed(index)) buttons |= 1 << bit;
+    let left = value(6), right = value(7);
+    if (gamepad.mapping !== 'standard') {
+      // triggers on axes 4 and 5 (-1 at rest) when there are no trigger buttons
+      if (b.length < 8 && a.length >= 6) {
+        left = Math.max(0, (a[4] + 1) / 2);
+        right = Math.max(0, (a[5] + 1) / 2);
+      }
+      if (b.length < 13) {
+        let x = 0, y = 0;
+        if (a.length >= 10 && Math.abs(a[9]) <= 1.01) {
+          // a hat: -1 up, then clockwise in steps of 2/7; above 1 at rest
+          const step = Math.round((a[9] + 1) * 3.5);
+          x = [0, 1, 1, 1, 0, -1, -1, -1][step] || 0;
+          y = [-1, -1, 0, 1, 1, 1, 0, -1][step] || 0;
+        } else if (a.length >= 8) {
+          x = Math.round(a[6]);
+          y = Math.round(a[7]);
+        }
+        if (y < 0) buttons |= 1 << BUTTON.DPAD_UP;
+        if (y > 0) buttons |= 1 << BUTTON.DPAD_DOWN;
+        if (x < 0) buttons |= 1 << BUTTON.DPAD_LEFT;
+        if (x > 0) buttons |= 1 << BUTTON.DPAD_RIGHT;
+      }
+    }
+    const trigger = (v) => Math.round(v * 32767);
+    return [buttons, [axis(a[0] || 0), axis(a[1] || 0), axis(a[2] || 0), axis(a[3] || 0), trigger(left), trigger(right)]];
+  }
+
+  // told when a controller comes or goes: (name, connected)
+  let controllerListener = null;
+
+  function controllerName(gamepad) {
+    // "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)"
+    return (gamepad.id || 'Controller').replace(/\s*\(.*$/, '').replace(/^[0-9a-f]{4}-[0-9a-f]{4}-/i, '').trim() || 'Controller';
+  }
+
+  function connectedControllers() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    return [...pads].filter((pad) => pad && pad.connected).map(controllerName);
+  }
+
   function pollGamepads() {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     const used = new Set();
@@ -205,30 +266,20 @@ const HaloInput = (() => {
         if (slot === undefined) continue;
         gamepadIds.set(gamepad.index, slot);
         slot = gamepadIds.get(gamepad.index);
+        if (controllerListener) controllerListener(controllerName(gamepad), true);
         shared.ids = shared.ids || [];
         shared.ids[slot] = nextGamepadId++;
       }
       used.add(slot);
       physicalCount++;
-      const b = gamepad.buttons;
-      const pressed = (i) => (b[i] ? (b[i].pressed || b[i].value > 0.5) : false);
-      let buttons = 0;
-      const map = [
-        [0, BUTTON.SOUTH], [1, BUTTON.EAST], [2, BUTTON.WEST], [3, BUTTON.NORTH], [4, BUTTON.LEFT_SHOULDER],
-        [5, BUTTON.RIGHT_SHOULDER], [8, BUTTON.BACK], [9, BUTTON.START], [10, BUTTON.LEFT_STICK],
-        [11, BUTTON.RIGHT_STICK], [12, BUTTON.DPAD_UP], [13, BUTTON.DPAD_DOWN], [14, BUTTON.DPAD_LEFT],
-        [15, BUTTON.DPAD_RIGHT], [16, BUTTON.GUIDE],
-      ];
-      for (const [index, bit] of map) if (pressed(index)) buttons |= 1 << bit;
-      const a = gamepad.axes;
-      const trigger = (i) => (b[i] ? Math.round(Math.max(0, Math.min(1, b[i].value)) * 32767) : 0);
-      writeGamepad(slot, true, shared.ids[slot], gamepadType(gamepad), buttons,
-        [axis(a[0] || 0), axis(a[1] || 0), axis(a[2] || 0), axis(a[3] || 0), trigger(6), trigger(7)]);
+      const [buttons, axes] = readGamepad(gamepad);
+      writeGamepad(slot, true, shared.ids[slot], gamepadType(gamepad), buttons, axes);
       rumble(slot, gamepad);
     }
     for (const [index, slot] of [...gamepadIds.entries()]) {
       if (!used.has(slot)) {
         gamepadIds.delete(index);
+        if (controllerListener) controllerListener('', false);
         writeGamepad(slot, false, 0, 0, 0, [0, 0, 0, 0, 0, 0]);
       }
     }
@@ -501,5 +552,9 @@ const HaloInput = (() => {
     setTimeout(() => pushEvent(EVENT.KEY, 42, 0, 0, 8), 120);
   }
 
-  return { attach, pollGamepads, setLookSensitivity, pressBack };
+  function onController(listener) {
+    controllerListener = listener;
+  }
+
+  return { attach, pollGamepads, setLookSensitivity, pressBack, onController, connectedControllers };
 })();

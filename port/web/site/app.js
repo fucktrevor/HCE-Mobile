@@ -38,7 +38,7 @@ can run the game, copies the game data out of the player's disc image
   // ---------- settings (this browser's; nothing else depends on them)
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
-  const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: false };
+  const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: false, silentSound: true };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
@@ -466,6 +466,27 @@ can run the game, copies the game data out of the player's disc image
     refreshGames();
   }
 
+  // ---------- controllers on the start page
+
+  // Browsers show a controller to a page only after one of its buttons is
+  // pressed while the page is open: the start page says so, and names the
+  // controllers it sees.
+  function watchControllers() {
+    const view = $('controller-status');
+    const update = () => {
+      if (state.started) return;
+      const names = HaloInput.connectedControllers();
+      view.textContent = names.length
+        ? `Controller ready: ${names.join(', ')}. It replaces the touch controls while connected.`
+        : 'Using a controller? Pair it (Bluetooth) or plug it in, then press any button on it.';
+      view.classList.toggle('ready', names.length > 0);
+    };
+    window.addEventListener('gamepadconnected', update);
+    window.addEventListener('gamepaddisconnected', update);
+    update();
+    setInterval(update, 1000);
+  }
+
   // ---------- the running game
 
   function landscapeSize() {
@@ -543,6 +564,10 @@ can run the game, copies the game data out of the player's disc image
       if (hidden) state.audio.suspend().catch(() => {});
       else state.audio.resume().catch(() => {});
     }
+    if (state.silentAudio) {
+      if (hidden) state.silentAudio.pause();
+      else state.silentAudio.play().catch(() => {});
+    }
     if (!hidden) requestWakeLock();
   }
 
@@ -550,6 +575,53 @@ can run the game, copies the game data out of the player's disc image
     try {
       if (navigator.wakeLock && !document.hidden) state.wakeLock = await navigator.wakeLock.request('screen');
     } catch { /* not allowed now */ }
+  }
+
+  // iOS plays a page's Web Audio through the ringer: on silent, nothing,
+  // whatever the volume. As a media player's sound ("playback"), it plays on
+  // silent, as a video's does (and pauses other apps' music, as they do).
+  // Safari 17 and later take the Audio Session API; before it, a page that
+  // plays an <audio> element has the same audio session, and a silent one,
+  // looping, is enough.
+  function playThroughSilentSwitch() {
+    if (!settings.silentSound) return;
+    try {
+      if (navigator.audioSession) {
+        navigator.audioSession.type = 'playback';
+        return;
+      }
+    } catch { /* not settable */ }
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!ios) return;
+    // half a second of silence: 8 kHz, 8 bits, mono
+    const samples = 4000;
+    const bytes = new Uint8Array(44 + samples);
+    const view = new DataView(bytes.buffer);
+    const text = (offset, value) => { for (let i = 0; i < value.length; i++) bytes[offset + i] = value.charCodeAt(i); };
+    text(0, 'RIFF'); view.setUint32(4, 36 + samples, true); text(8, 'WAVE'); text(12, 'fmt ');
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, 8000, true); view.setUint32(28, 8000, true); view.setUint16(32, 1, true); view.setUint16(34, 8, true);
+    text(36, 'data'); view.setUint32(40, samples, true); bytes.fill(128, 44);
+    const element = document.createElement('audio');
+    element.src = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+    element.loop = true;
+    element.setAttribute('playsinline', '');
+    element.play().catch((error) => log('silent switch: ' + error));
+    state.silentAudio = element;
+  }
+
+  // a call, Siri or another app can stop the sound; the next touch or key
+  // starts it again
+  function keepAudioRunning() {
+    const resume = () => {
+      if (state.audio && state.audio.state !== 'running' && !document.hidden) state.audio.resume().catch(() => {});
+      if (state.silentAudio && state.silentAudio.paused && !document.hidden) state.silentAudio.play().catch(() => {});
+    };
+    window.addEventListener('touchstart', resume, { passive: true });
+    window.addEventListener('keydown', resume);
+    window.addEventListener('pointerdown', resume);
+    if (state.audio) state.audio.onstatechange = () => log('audio: ' + state.audio.state);
   }
 
   async function startAudio() {
@@ -586,10 +658,12 @@ can run the game, copies the game data out of the player's disc image
     state.started = true;
 
     // in the tap: browsers start sound only then
+    playThroughSilentSwitch();
     try {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       state.audio = new AudioContextClass({ sampleRate: 48000, latencyHint: 'interactive' });
       state.audio.resume().catch(() => {});
+      keepAudioRunning();
     } catch (error) {
       log('audio context: ' + error);
     }
@@ -663,9 +737,15 @@ can run the game, copies the game data out of the player's disc image
           touchLayout: settings.touchLayout,
         });
         HaloInput.setLookSensitivity(settings.look);
+        HaloInput.onController((name, connected) => {
+          toast(connected ? `Controller connected: ${name}` : 'Controller disconnected', 2500);
+        });
         HaloNet.attach({ memory: state.memory, base: state.shared, offsets: state.offsets });
         $('touch').hidden = !settings.touch;
         requestAnimationFrame(animationFrame);
+        // controllers are also read between animation frames, so a press
+        // shorter than a frame still counts
+        setInterval(() => HaloInput.pollGamepads(), 8);
         if (settings.showTiming) showFrameRate();
         startAudio();
         log('runtime ready');
@@ -822,6 +902,8 @@ can run the game, copies the game data out of the player's disc image
     $('opt-vsync').onchange = (event) => { settings.vsync = event.target.checked; saveSettings(); };
     $('opt-fps').checked = settings.showTiming;
     $('opt-fps').onchange = (event) => { settings.showTiming = event.target.checked; saveSettings(); };
+    $('opt-silent').checked = settings.silentSound;
+    $('opt-silent').onchange = (event) => { settings.silentSound = event.target.checked; saveSettings(); };
     $('opt-gldebug').checked = settings.glDebug;
     $('opt-gldebug').onchange = (event) => { settings.glDebug = event.target.checked; saveSettings(); };
     $('iso-file').onchange = onImageChosen;
@@ -866,6 +948,7 @@ can run the game, copies the game data out of the player's disc image
     };
     window.addEventListener('appinstalled', () => { $('install-android').hidden = true; });
 
+    watchControllers();
     await ensureIsolation();
     setUpOnline();
     const ok = await runChecks();

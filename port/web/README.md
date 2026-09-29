@@ -72,8 +72,17 @@ without use: install the app to keep it.
 
 ## Controls
 
-- A controller that the browser knows (Xbox, PlayStation, MFi, Switch Pro):
-  as on Android. The browser sees a controller only after a button is pushed.
+- A controller, over Bluetooth or a cable (USB-C or Lightning): Xbox,
+  PlayStation, Switch Pro, MFi and Backbone-style controllers, and most
+  Android ones, as on Android. Pair it in the system's Bluetooth settings or
+  plug it in, then push any of its buttons: browsers show a controller to a
+  page only after that. The start page names the controllers it sees; in the
+  game a notice says when one connects or disconnects, and the touch
+  controls hide while one is connected. Controllers the browser does not
+  describe with its standard mapping are read in the usual order of generic
+  controllers (triggers as buttons or axes, the d-pad as buttons, axes or a
+  hat). Up to four controllers are players 1 to 4 in split screen. Controllers
+  are read every 8 ms as well as at each animation frame.
 - Touch, in one of two layouts (*Settings and data* > *Touch layout*):
   - *Modern* (the default), as in mobile shooters: a large fire button
     under the right thumb that also aims while held, the other actions as
@@ -92,6 +101,16 @@ without use: install the app to keep it.
   of the game's frames (`web_gamepad.pressed`).
 - A keyboard and mouse (iPad or computer): as on Linux. Click the game to lock
   the pointer; Esc releases it.
+
+## Sound
+
+iOS plays a page's Web Audio through the ringer: with the phone on silent,
+nothing, whatever the volume. The page makes its sound a media player's
+(the Audio Session API's `playback`, or before Safari 17, a silent looping
+`<audio>` element), so it plays on silent as a video does, and pauses music
+from other apps as a video does. *Settings and data* > *Sound when the phone
+is on silent* turns this off. After a call or Siri, the sound comes back at
+the next touch or key.
 
 ## Online play
 

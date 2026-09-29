@@ -143,6 +143,8 @@ code { background: #0e1117; padding: 1px 5px; border-radius: 4px; }
   color: var(--text);
   font: inherit;
 }
+.controller-status { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.controller-status.ready { color: #9fe870; }
 .games { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
 .game {
   display: flex;
