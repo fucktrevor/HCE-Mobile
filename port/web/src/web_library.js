@@ -24,10 +24,38 @@ addToLibrary({
         Module[handler]?.(...args);
       }
     },
+    // HALO_WEB_GL_STATS: counts the WebGL calls and reports them per frame
+    calls: null,
+    callTime: null,
+    frames: 0,
+    countCalls(context) {
+      var calls = webHalo.calls = {};
+      var time = webHalo.callTime = {};
+      for (let name in context) {
+        let method = context[name];
+        if (typeof method != 'function') continue;
+        context[name] = function () {
+          var start = performance.now();
+          var result = method.apply(context, arguments);
+          calls[name] = (calls[name] || 0) + 1;
+          time[name] = (time[name] || 0) + performance.now() - start;
+          return result;
+        };
+      }
+    },
+    reportCalls() {
+      if (++webHalo.frames % 120) return;
+      var calls = webHalo.calls, time = webHalo.callTime, total = 0, totalTime = 0;
+      for (var name in calls) { total += calls[name]; totalTime += time[name]; }
+      var top = Object.keys(calls).sort((a, b) => calls[b] - calls[a]).filter((name) => calls[name])
+        .map((name) => `${name} ${(calls[name] / 120).toFixed(0)} ${(time[name] / 120).toFixed(2)}ms`);
+      webHalo.post('haloMessage', [0, `GL per frame: ${(total / 120).toFixed(0)} calls ${(totalTime / 120).toFixed(2)}ms; ` + top.join(', ')]);
+      for (var name in calls) { calls[name] = 0; time[name] = 0; }
+    },
   },
 
   web_js_gl_create__deps: ['$GL', '$webHalo'],
-  web_js_gl_create: (width, height) => {
+  web_js_gl_create: (width, height, statistics) => {
     if (typeof OffscreenCanvas == 'undefined') {
       webHalo.post('haloMessage', [3, 'This browser cannot draw from a worker (OffscreenCanvas). iOS 17 or later is needed.']);
       return 0;
@@ -53,6 +81,7 @@ addToLibrary({
       webHalo.post('haloMessage', [3, 'The graphics context was lost. Reload the page to continue.']);
     });
     webHalo.canvas = canvas;
+    if (statistics) webHalo.countCalls(context);
     var handle = GL.registerContext(context, Object.assign({
       majorVersion: 2,
       minorVersion: 0,
@@ -75,6 +104,7 @@ addToLibrary({
   web_js_gl_present: () => {
     var canvas = webHalo.canvas;
     if (!canvas) return;
+    if (webHalo.calls) webHalo.reportCalls();
     var bitmap = canvas.transferToImageBitmap();
     webHalo.post('haloPresent', [bitmap], [bitmap]);
   },

@@ -403,3 +403,17 @@ body.has-controller .touch-layer { display: none; }
   .touch-button.left-click, .touch-button.right-click { bottom: calc(var(--edge-bottom) + 158px); }
   .touch-button.right-click { right: calc(210px + var(--edge-right)); }
 }
+
+/* Settings: "Show the frame rate" */
+.fps {
+  position: fixed;
+  top: max(6px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  z-index: 30;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #9fe870;
+  font: 600 13px/1.4 ui-monospace, Menlo, monospace;
+  pointer-events: none;
+}

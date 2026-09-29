@@ -29,7 +29,7 @@ frame goes to the page as an ImageBitmap.
 #include "web_shared.h"
 
 /* web_library.js */
-int web_js_gl_create(int width, int height);
+int web_js_gl_create(int width, int height, int statistics);
 void web_js_gl_resize(int width, int height);
 void web_js_gl_present(void);
 void web_js_post(int kind, const char *text);
@@ -270,7 +270,7 @@ SDL_GLContext SDL_GL_CreateContext(SDL_Window *window)
 	if (!gl_context)
 	{
 		display_size(&canvas_width, &canvas_height);
-		gl_context = web_js_gl_create(canvas_width, canvas_height);
+		gl_context = web_js_gl_create(canvas_width, canvas_height, getenv("HALO_WEB_GL_STATS") != NULL);
 		if (!gl_context)
 		{
 			set_error("WebGL 2 is not available");

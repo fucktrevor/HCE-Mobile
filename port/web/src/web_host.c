@@ -10,6 +10,7 @@ that never returns to its event loop could wait on.
 */
 
 #include <GLES3/gl3.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "platform.h"
@@ -35,6 +36,9 @@ int host_gl_has_extension(const char *name)
 	const char *found;
 
 	if (!extensions || !name)
+		return 0;
+	/* HALO_WEB_NO_S3TC=1 takes the path of browsers without S3TC (iOS) */
+	if (strstr(name, "compression") && getenv("HALO_WEB_NO_S3TC") && atoi(getenv("HALO_WEB_NO_S3TC")))
 		return 0;
 	for (index = 0; index < sizeof(aliases) / sizeof(aliases[0]); index++)
 	{

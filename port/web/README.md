@@ -186,8 +186,13 @@ these differences for WebGL 2 (`#ifdef HALO_WEB` in `xbox_textures.c` and
 - The visibility tests (lens flares) report every sample visible: WebGL gives
   query results only between tasks, which the game's thread never reaches.
 - Buffer writes are `glBufferSubData`, which copies: there are no fences.
-- Strides are at most 255 bytes: the immediate mode's vertices (16
-  attributes of 4 floats) go up as one array per attribute.
+- Strides are at most 255 bytes, less than an immediate mode vertex (16
+  attributes of 4 floats). The attributes whose value is the same for every
+  vertex of a draw become constant attributes; the others go up interleaved,
+  a whole number of vertices into the buffer, so the attribute pointers stay
+  as they were and the draw starts at a first vertex. Safari runs WebGL in
+  another process, and each call costs a message: this takes the menus from
+  about 2,300 calls a frame to 700.
 
 The Xbox memory cannot be write-protected in WebAssembly. The memory watch
 (`src/web_memory_watch.c`) keeps a hash of each page the renderer caches, and
@@ -221,10 +226,18 @@ the game only when it is there.
 - Bink video is not available. The game skips the movies.
 - Lens flares show through walls (see "WebGL 2").
 - Performance depends on the device. The game draws 480 lines at the shape of
-  the screen and scales them up.
+  the screen; the page scales them up, so each frame that goes from the game's
+  thread to the page is 480 lines too.
 
 ## Find problems
+
+*Settings and data* > *Show the frame rate* shows the frames drawn each
+second, and the display's rate, over the game.
 
 *Settings and data* > *Show log* shows the page's log and `debug.txt`, the
 game's log, and can copy them for a report. *Log graphics errors* sets
 `debug.gl_debug`. When the game stops, the page shows why.
+
+For development, `window.__haloArgs` (set before *Play*) passes environment
+variables to the game: `--HALO_WEB_GL_STATS=1` logs the WebGL calls of each
+frame, `--HALO_WEB_NO_S3TC=1` decodes compressed textures as iOS does.

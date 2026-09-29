@@ -17,6 +17,7 @@
 <body>
 <canvas id="screen" aria-label="Game"></canvas>
 <div id="touch" class="touch-layer" hidden></div>
+<div id="fps" class="fps" hidden></div>
 
 <main id="launcher">
   <section class="panel">
@@ -80,6 +81,7 @@
       <label class="row"><input type="checkbox" id="opt-touch"> Touch controls</label>
       <label class="row">Aim sensitivity <input type="range" id="opt-look" min="0.4" max="3" step="0.1"></label>
       <label class="row"><input type="checkbox" id="opt-vsync" checked> Wait for the display (smoother, saves battery)</label>
+      <label class="row"><input type="checkbox" id="opt-fps"> Show the frame rate</label>
       <label class="row"><input type="checkbox" id="opt-gldebug"> Log graphics errors (for bug reports)</label>
       <p class="small">Online play: a TURN relay, for networks that WebRTC cannot cross directly (some mobile networks).</p>
       <label class="row">TURN server <input type="text" id="opt-turn-url" placeholder="turn:host:3478"></label>

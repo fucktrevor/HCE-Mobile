@@ -3417,29 +3417,128 @@ void WINAPI D3DDevice_End(void)
 	trace_draw("immediate", type, count, device.immediate_vertices);
 #ifdef HALO_WEB
 	/* WebGL allows strides of at most 255 bytes, less than a whole immediate
-	vertex: each attribute goes up as an array of its own */
+	vertex, and each WebGL call costs a message to the browser's GPU
+	process. Attributes whose value is the same for every vertex become
+	constant attributes; the others go up interleaved, at an offset that is a
+	whole number of vertices, so the attribute pointers stay the same from one
+	draw to the next and the draw starts at a first vertex instead. */
 	{
-		unsigned long attribute_bytes = count * 4 * sizeof(float);
-		float *arrays = malloc(XGPU_VERTEX_ATTRIBUTE_COUNT * attribute_bytes);
-		unsigned long vertex;
+		static float *packed;
+		static unsigned long packed_capacity;
+		const unsigned long floats = XGPU_VERTEX_ATTRIBUTE_COUNT * 4;
+		const float *vertices = device.immediate_vertices;
+		unsigned char slots[XGPU_VERTEX_ATTRIBUTE_COUNT];
+		unsigned long varying = 1, vertex, web_stride, size, first;
 
-		if (!arrays)
+		/* the position is always an array: an attribute array must be
+		enabled for WebGL to count the vertices */
+		slots[0] = 0;
+		for (index = 1; index < XGPU_VERTEX_ATTRIBUTE_COUNT; index++)
+		{
+			slots[index] = 0xff;
+			for (vertex = 1; vertex < count; vertex++)
+			{
+				if (memcmp(vertices + vertex * floats + index * 4, vertices + index * 4, 4 * sizeof(float)))
+				{
+					slots[index] = (unsigned char)varying++;
+					break;
+				}
+			}
+		}
+		if (varying == XGPU_VERTEX_ATTRIBUTE_COUNT)
+		{
+			/* 256 bytes a vertex: the last attribute that varies goes up on
+			its own */
+			varying--;
+		}
+		web_stride = varying * 4 * sizeof(float);
+		size = count * web_stride;
+		if (packed_capacity < count * varying * 4)
+		{
+			free(packed);
+			packed_capacity = count * varying * 4 + 1024;
+			packed = malloc(packed_capacity * sizeof(float));
+			if (!packed)
+			{
+				packed_capacity = 0;
+				return;
+			}
+		}
+		for (index = 0; index < XGPU_VERTEX_ATTRIBUTE_COUNT; index++)
+		{
+			if (slots[index] >= varying)
+				continue;
+			for (vertex = 0; vertex < count; vertex++)
+			{
+				memcpy(packed + (vertex * varying + slots[index]) * 4, vertices + vertex * floats + index * 4,
+					4 * sizeof(float));
+			}
+		}
+		/* start at a whole number of vertices into the buffer */
+		/* room for the 16th varying attribute too, so the buffer is not
+		orphaned between the two uploads */
+		stream_reserve(size + web_stride + count * 4 * sizeof(float) + 32);
+		first = (device.stream_offset + web_stride - 1) / web_stride;
+		device.stream_offset = first * web_stride;
+		offset = stream_upload(packed, size);
+		if (offset != first * web_stride)
 			return;
 		for (index = 0; index < XGPU_VERTEX_ATTRIBUTE_COUNT; index++)
 		{
-			for (vertex = 0; vertex < count; vertex++)
+			if (slots[index] < varying)
 			{
-				memcpy(arrays + (index * count + vertex) * 4,
-					device.immediate_vertices + vertex * XGPU_VERTEX_ATTRIBUTE_COUNT * 4 + index * 4, 4 * sizeof(float));
+				state_attribute_pointer(index, device.stream_buffer, 4, GL_FLOAT, GL_FALSE, FALSE,
+					(GLsizei)web_stride, slots[index] * 4 * sizeof(float));
+			}
+			else if (slots[index] != 0xff)
+			{
+				/* the 16th attribute that varies: an array of its own */
+				float *array = malloc(count * 4 * sizeof(float));
+				unsigned long array_offset;
+
+				if (!array)
+					return;
+				for (vertex = 0; vertex < count; vertex++)
+					memcpy(array + vertex * 4, vertices + vertex * floats + index * 4, 4 * sizeof(float));
+				/* its pointer takes the same first vertex */
+				array_offset = stream_upload(array, count * 4 * sizeof(float));
+				free(array);
+				state_attribute_pointer(index, device.stream_buffer, 4, GL_FLOAT, GL_FALSE, FALSE,
+					(GLsizei)(4 * sizeof(float)), array_offset - first * 4 * sizeof(float));
+			}
+			else
+			{
+				state_attribute_value(index, vertices + index * 4);
 			}
 		}
-		offset = stream_upload(arrays, XGPU_VERTEX_ATTRIBUTE_COUNT * attribute_bytes);
-		free(arrays);
-		for (index = 0; index < XGPU_VERTEX_ATTRIBUTE_COUNT; index++)
+		if (type == D3DPT_QUADLIST)
 		{
-			state_attribute_pointer(index, device.stream_buffer, 4, GL_FLOAT, GL_FALSE, FALSE,
-				(GLsizei)(4 * sizeof(float)), offset + index * attribute_bytes);
+			unsigned long quads = count / 4, quad;
+			GLuint *indices = malloc(quads * 6 * sizeof(GLuint) + 4);
+
+			if (!indices)
+				return;
+			for (quad = 0; quad < quads; quad++)
+			{
+				GLuint base = (GLuint)(first + quad * 4);
+
+				indices[quad * 6 + 0] = base;
+				indices[quad * 6 + 1] = base + 1;
+				indices[quad * 6 + 2] = base + 2;
+				indices[quad * 6 + 3] = base;
+				indices[quad * 6 + 4] = base + 2;
+				indices[quad * 6 + 5] = base + 3;
+			}
+			glDrawElements(GL_TRIANGLES, (GLsizei)(quads * 6), GL_UNSIGNED_INT,
+				(const void *)index_upload(indices, quads * 6 * sizeof(GLuint)));
+			free(indices);
 		}
+		else
+		{
+			glDrawArrays(primitive_mode(type), (GLint)first, (GLsizei)count);
+		}
+		gl_check_errors("immediate draw");
+		return;
 	}
 #else
 	offset = stream_upload(device.immediate_vertices, count * stride);

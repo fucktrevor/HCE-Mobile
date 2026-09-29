@@ -36,7 +36,7 @@ can run the game, copies the game data out of the player's disc image
   // ---------- settings (this browser's; nothing else depends on them)
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
-  const settings = { touch: coarsePointer, look: 1.4, vsync: true, glDebug: false };
+  const settings = { touch: coarsePointer, look: 1.4, vsync: true, glDebug: false, frameRate: false };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
@@ -327,17 +327,15 @@ can run the game, copies the game data out of the player's disc image
   // ---------- the running game
 
   function landscapeSize() {
-    const scale = Math.min(window.devicePixelRatio || 1, 2);
+    // The game draws 480 lines in the shape of the screen (src/web_main.c).
+    // The canvas is that size too: the page scales it up, and each frame
+    // that goes from the game's thread to the page is a third of the pixels
+    // of the screen's own resolution.
     const long = Math.max(window.innerWidth, window.innerHeight);
-    const short = Math.min(window.innerWidth, window.innerHeight);
-    let width = Math.round(long * scale);
-    let height = Math.round(short * scale);
-    // no larger than 1440 lines: the game draws 480 and scales them up
-    if (height > 1440) {
-      width = Math.round(width * 1440 / height);
-      height = 1440;
-    }
-    return { width: width & ~1, height: height & ~1 };
+    const short = Math.max(1, Math.min(window.innerWidth, window.innerHeight));
+    const height = 480;
+    const width = Math.min(Math.round(height * long / short), 1440);
+    return { width: width & ~1, height };
   }
 
   function sharedWord(name) {
@@ -371,6 +369,25 @@ can run the game, copies the game data out of the player's disc image
     Atomics.notify(i32, sharedWord('frameCounter'));
     HaloInput.pollGamepads();
     requestAnimationFrame(animationFrame);
+  }
+
+  // Settings: "Show the frame rate": frames shown each second, and how many
+  // animation frames the page had in that second
+  function showFrameRate() {
+    const view = $('fps');
+    let frames = 0, ticks = 0, last = performance.now();
+    view.hidden = false;
+    const tick = () => { ticks++; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    setInterval(() => {
+      const now = performance.now();
+      const seconds = (now - last) / 1000;
+      const shown = (state.presented || 0) - frames;
+      view.textContent = `${Math.round(shown / seconds)} fps · display ${Math.round(ticks / seconds)} Hz`;
+      frames = state.presented || 0;
+      ticks = 0;
+      last = now;
+    }, 1000);
   }
 
   function onVisibility() {
@@ -464,6 +481,7 @@ can run the game, copies the game data out of the player's disc image
           canvas.height = bitmap.height;
         }
         context.transferFromImageBitmap(bitmap);
+        state.presented = (state.presented || 0) + 1;
       },
       haloMessage: (kind, text) => {
         if (kind === 0) log('game: ' + text);
@@ -495,6 +513,7 @@ can run the game, copies the game data out of the player's disc image
         HaloNet.attach({ memory: state.memory, base: state.shared, offsets: state.offsets });
         $('touch').hidden = !settings.touch;
         requestAnimationFrame(animationFrame);
+        if (settings.frameRate) showFrameRate();
         startAudio();
         log('runtime ready');
       },
@@ -646,6 +665,8 @@ can run the game, copies the game data out of the player's disc image
       HaloInput.setLookSensitivity(settings.look);
     };
     $('opt-vsync').onchange = (event) => { settings.vsync = event.target.checked; saveSettings(); };
+    $('opt-fps').checked = settings.frameRate;
+    $('opt-fps').onchange = (event) => { settings.frameRate = event.target.checked; saveSettings(); };
     $('opt-gldebug').checked = settings.glDebug;
     $('opt-gldebug').onchange = (event) => { settings.glDebug = event.target.checked; saveSettings(); };
     $('iso-file').onchange = onImageChosen;
