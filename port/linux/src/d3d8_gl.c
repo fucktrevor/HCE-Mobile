@@ -3076,6 +3076,44 @@ static void index_extent(const WORD *indices, unsigned long count, unsigned long
 is full. A draw reserves room for all of its streams at once: orphaning
 between two of them would leave the attributes already pointed at the
 buffer reading its new, empty storage. */
+#ifdef HALO_WEB
+/* WebGL on Metal (Safari) cannot write into a buffer that a draw of the
+frame not yet on the GPU reads: it copies the buffer, or splits the frame
+around the write, each time. Each upload takes a buffer of its own, from a
+ring, and gives it new storage (glBufferData), which the draws before it
+never read: the stream and index "offset" is then always 0, and
+device.stream_buffer or device.index_buffer names the buffer. */
+#define WEB_UPLOAD_RING 512
+
+static GLuint web_stream_ring[WEB_UPLOAD_RING], web_index_ring[WEB_UPLOAD_RING];
+static unsigned long web_stream_next, web_index_next;
+
+static GLuint web_upload(GLenum target, GLuint *ring, unsigned long *next, const void *data, unsigned long size)
+{
+	GLuint buffer;
+
+	if (!ring[0])
+		glGenBuffers(WEB_UPLOAD_RING, ring);
+	buffer = ring[(*next)++ % WEB_UPLOAD_RING];
+	if (target == GL_ARRAY_BUFFER)
+		state_array_buffer(buffer);
+	else
+		state_element_array_buffer(buffer);
+	glBufferData(target, (GLsizeiptr)size, data, GL_STREAM_DRAW);
+	return buffer;
+}
+
+static void stream_reserve(unsigned long size)
+{
+	(void)size;
+}
+
+static unsigned long stream_upload(const void *data, unsigned long size)
+{
+	device.stream_buffer = web_upload(GL_ARRAY_BUFFER, web_stream_ring, &web_stream_next, data, size);
+	return 0;
+}
+#else
 static void stream_reserve(unsigned long size)
 {
 	if (device.stream_offset + size > STREAM_BUFFER_SIZE)
@@ -3103,6 +3141,7 @@ static unsigned long stream_upload(const void *data, unsigned long size)
 	device.stream_offset += size;
 	return offset;
 }
+#endif
 
 #ifdef HALO_ANDROID
 /* stream_upload, with the D3DCOLOR elements of the stream turned from BGRA
@@ -3146,6 +3185,13 @@ static unsigned long stream_upload_swizzled(const struct vertex_shader_object *d
 }
 #endif
 
+#ifdef HALO_WEB
+static unsigned long index_upload(const void *data, unsigned long size)
+{
+	device.index_buffer = web_upload(GL_ELEMENT_ARRAY_BUFFER, web_index_ring, &web_index_next, data, size);
+	return 0;
+}
+#else
 static unsigned long index_upload(const void *data, unsigned long size)
 {
 	unsigned long offset;
@@ -3166,6 +3212,7 @@ static unsigned long index_upload(const void *data, unsigned long size)
 	device.index_offset += size;
 	return offset;
 }
+#endif
 
 static void attribute_format(const struct vertex_element *element, GLint *size, GLenum *type, GLboolean *normalized)
 {
@@ -3463,9 +3510,7 @@ void WINAPI D3DDevice_End(void)
 	/* WebGL allows strides of at most 255 bytes, less than a whole immediate
 	vertex, and each WebGL call costs a message to the browser's GPU
 	process. Attributes whose value is the same for every vertex become
-	constant attributes; the others go up interleaved, at an offset that is a
-	whole number of vertices, so the attribute pointers stay the same from one
-	draw to the next and the draw starts at a first vertex instead. */
+	constant attributes; the others go up interleaved. */
 	{
 		static float *packed;
 		static unsigned long packed_capacity;
@@ -3473,6 +3518,7 @@ void WINAPI D3DDevice_End(void)
 		const float *vertices = device.immediate_vertices;
 		unsigned char slots[XGPU_VERTEX_ATTRIBUTE_COUNT];
 		unsigned long varying = 1, vertex, web_stride, size, first;
+		GLuint packed_buffer;
 
 		/* the position is always an array: an attribute array must be
 		enabled for WebGL to count the vertices */
@@ -3518,21 +3564,17 @@ void WINAPI D3DDevice_End(void)
 					4 * sizeof(float));
 			}
 		}
-		/* start at a whole number of vertices into the buffer */
-		/* room for the 16th varying attribute too, so the buffer is not
-		orphaned between the two uploads */
-		stream_reserve(size + web_stride + count * 4 * sizeof(float) + 32);
-		first = (device.stream_offset + web_stride - 1) / web_stride;
-		device.stream_offset = first * web_stride;
+		/* each upload has a buffer of its own (stream_upload): the draw
+		starts at its first vertex, and the pointers change with the buffer */
+		first = 0;
 		offset = stream_upload(packed, size);
-		if (offset != first * web_stride)
-			return;
+		packed_buffer = device.stream_buffer;
 		for (index = 0; index < XGPU_VERTEX_ATTRIBUTE_COUNT; index++)
 		{
 			if (slots[index] < varying)
 			{
-				state_attribute_pointer(index, device.stream_buffer, 4, GL_FLOAT, GL_FALSE, FALSE,
-					(GLsizei)web_stride, slots[index] * 4 * sizeof(float));
+				state_attribute_pointer(index, packed_buffer, 4, GL_FLOAT, GL_FALSE, FALSE,
+					(GLsizei)web_stride, offset + slots[index] * 4 * sizeof(float));
 			}
 			else if (slots[index] != 0xff)
 			{
@@ -3544,11 +3586,10 @@ void WINAPI D3DDevice_End(void)
 					return;
 				for (vertex = 0; vertex < count; vertex++)
 					memcpy(array + vertex * 4, vertices + vertex * floats + index * 4, 4 * sizeof(float));
-				/* its pointer takes the same first vertex */
 				array_offset = stream_upload(array, count * 4 * sizeof(float));
 				free(array);
 				state_attribute_pointer(index, device.stream_buffer, 4, GL_FLOAT, GL_FALSE, FALSE,
-					(GLsizei)(4 * sizeof(float)), array_offset - first * 4 * sizeof(float));
+					(GLsizei)(4 * sizeof(float)), array_offset);
 			}
 			else
 			{

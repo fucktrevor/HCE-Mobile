@@ -40,7 +40,8 @@ addToLibrary({
           var result = method.apply(context, arguments);
           calls[name] = (calls[name] || 0) + 1;
           var a = arguments, bytes = 0;
-          if (name == 'bufferSubData' || name == 'bufferData') bytes = typeof a[4] == 'number' ? a[4] : (a[2] && a[2].byteLength) || 0;
+          if (name == 'bufferSubData') bytes = typeof a[4] == 'number' ? a[4] : (a[2] && a[2].byteLength) || 0;
+          else if (name == 'bufferData') bytes = typeof a[4] == 'number' ? a[4] : (a[1] && a[1].byteLength) || 0;
           else if (name == 'texImage2D' || name == 'texSubImage2D') bytes = (name == 'texImage2D' ? a[3] * a[4] : a[4] * a[5]) * 4;
           else if (name == 'texImage3D' || name == 'texSubImage3D') bytes = (name == 'texImage3D' ? a[3] * a[4] * a[5] : a[5] * a[6] * a[7]) * 4;
           else if (name == 'compressedTexImage2D' || name == 'compressedTexSubImage2D') bytes = a[a.length - 1] || 0;
