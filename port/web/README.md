@@ -64,6 +64,15 @@ top of the storage; each one added after it is `games/<id>/`, with its
 `HALO_DATA_ROOT` and `HALO_SAVE_ROOT`. Players in an online room need the
 same maps.
 
+*Settings and data* > *Export saved games* makes a `.zip` of the chosen
+copy's saved games and `config.toml`; *Restore saved games* puts such a
+`.zip` (or any `.zip` with a `save` folder in it) back into the chosen copy.
+
+In the game, the menu button (top left) sets the aim sensitivity, the touch
+layout (and edits it), the sound on silent and the frame rate view while
+the game runs, restarts the game with another copy, or goes back to the
+start page. The system's back gesture closes the menu.
+
 The copy is kept in the site's Origin Private File System. The saved games
 (`z:\`, `u:\`) and `config.toml` are there too. *Settings and data* can
 export the saved games as a `.zip` and delete the game data. On iOS, data of
@@ -93,6 +102,11 @@ without use: install the app to keep it.
   - *Original Xbox controller*: the Controller S, with A, B, X and Y, the
     white and black buttons, the triggers, back and start, the d-pad and
     the stick clicks.
+
+  *Edit layout* (on the start page, or in the game's menu) moves any
+  control, the d-pad and the stick's resting place included, by dragging it,
+  sizes the one picked, and sets the controls' opacity; each layout keeps
+  its own edits.
 
   In both, a touch anywhere on the left side is a stick for moving, and a
   drag on the right side aims. The touch controls hide while a controller

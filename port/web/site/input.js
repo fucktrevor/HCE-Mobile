@@ -362,10 +362,33 @@ const HaloInput = (() => {
     ],
   };
 
-  function buildTouchControls(root, layoutName) {
+  // Moves and resizes a control (a button, the d-pad, the stick's resting
+  // place) as the layout editor left it: its centre as fractions of the
+  // screen, and a scale. The individual translate and scale properties
+  // compose with the transform a pressed button takes.
+  function placeControl(element, place) {
+    if (!place) {
+      for (const property of ['left', 'top', 'right', 'bottom', 'translate', 'scale']) element.style[property] = '';
+      return;
+    }
+    if (place.x !== undefined) {
+      element.style.left = (place.x * 100).toFixed(2) + '%';
+      element.style.top = (place.y * 100).toFixed(2) + '%';
+      element.style.right = 'auto';
+      element.style.bottom = 'auto';
+      element.style.translate = '-50% -50%';
+    }
+    element.style.scale = place.s && place.s !== 1 ? String(place.s) : '';
+  }
+
+  // options: custom ({ control: { x, y, s } }), opacity, editor (no game input)
+  function buildTouchControls(root, layoutName, options = {}) {
     const layoutKey = TOUCH_LAYOUTS[layoutName] ? layoutName : 'modern';
     const layout = TOUCH_LAYOUTS[layoutKey];
+    const custom = options.custom || {};
+    root.classList.remove('modern', 'xbox');
     root.classList.add(layoutKey);
+    root.style.opacity = options.opacity && options.opacity < 1 ? String(options.opacity) : '';
     const held = new Map(); // touch identifier -> control
     const buttonState = new Map(); // control id -> count of touches
     const stick = { id: null, x: 0, y: 0, element: null, knob: null };
@@ -412,6 +435,15 @@ const HaloInput = (() => {
       controls[id] = { element, action };
     }
 
+    dpad.dataset.control = 'dpad';
+    stickBase.dataset.control = 'stick';
+    for (const element of root.querySelectorAll('[data-control]')) {
+      if (element.parentElement === dpad) continue;
+      placeControl(element, custom[element.dataset.control]);
+    }
+    const stickRest = custom.stick;
+    if (options.editor) return { root, layoutKey, dpad, stickBase };
+
     function refreshButtons() {
       let buttons = 0;
       touchPad.axes[4] = 0;
@@ -452,9 +484,11 @@ const HaloInput = (() => {
           stick.id = touch.identifier;
           stick.x = touch.clientX;
           stick.y = touch.clientY;
-          const half = stick.element.offsetWidth / 2 || 64;
+          const half = (stick.element.offsetWidth / 2 || 64);
+          stick.element.style.translate = 'none';
           stick.element.style.left = (touch.clientX - half) + 'px';
           stick.element.style.top = (touch.clientY - half) + 'px';
+          stick.element.style.right = 'auto';
           stick.element.style.bottom = 'auto';
           stick.element.classList.add('active');
           held.set(touch.identifier, { kind: 'stick' });
@@ -506,9 +540,8 @@ const HaloInput = (() => {
           stick.knob.style.transform = '';
           stick.element.classList.remove('active');
           // back to its resting place
-          stick.element.style.left = '';
-          stick.element.style.top = '';
-          stick.element.style.bottom = '';
+          placeControl(stick.element, null);
+          placeControl(stick.element, stickRest);
           touchPad.axes[0] = 0;
           touchPad.axes[1] = 0;
         }
@@ -526,7 +559,10 @@ const HaloInput = (() => {
 
   // ---------- setup
 
-  function attach({ memory, base, offsets, canvas, touchRoot, touch, touchLayout }) {
+  let touchRoot = null;
+
+  function attach({ memory, base, offsets, canvas, touchRoot: root, touch, touchLayout, touchCustom, touchOpacity }) {
+    touchRoot = root;
     const buffer = memory.buffer;
     shared = { i32: new Int32Array(buffer), f32: new Float32Array(buffer), base, offsets, ids: [] };
     window.addEventListener('keydown', (event) => onKey(event, true));
@@ -536,7 +572,7 @@ const HaloInput = (() => {
     attachMouse(canvas);
     touchEnabled = touch;
     if (touch) {
-      buildTouchControls(touchRoot, touchLayout);
+      buildTouchControls(touchRoot, touchLayout, { custom: touchCustom, opacity: touchOpacity });
       touchUsed = true;
     }
   }
@@ -552,9 +588,107 @@ const HaloInput = (() => {
     setTimeout(() => pushEvent(EVENT.KEY, 42, 0, 0, 8), 120);
   }
 
+  // a new layout, or the same one edited, while the game runs: the controls
+  // are built again on a fresh element (which drops the old one's listeners)
+  function setTouchLayout(layoutName, custom, opacity) {
+    if (!touchRoot || !touchEnabled) return;
+    const fresh = touchRoot.cloneNode(false);
+    touchRoot.replaceWith(fresh);
+    touchRoot = fresh;
+    touchPad.buttons = 0;
+    touchPad.tapped = 0;
+    touchPad.axes.fill(0);
+    buildTouchControls(fresh, layoutName, { custom, opacity });
+  }
+
+  // The layout editor: the controls of a layout, in container, to drag
+  // (move) and to size. onDone(custom, opacity) when Done is pushed.
+  function editTouchLayout(container, layoutName, custom, opacity, onDone) {
+    const places = JSON.parse(JSON.stringify(custom || {}));
+    let alpha = opacity || 1;
+    container.textContent = '';
+    const stage = document.createElement('div');
+    stage.className = 'touch-layer';
+    container.appendChild(stage);
+    const built = buildTouchControls(stage, layoutName, { custom: places, opacity: alpha, editor: true });
+    const bar = document.createElement('div');
+    bar.className = 'editor-bar';
+    bar.innerHTML = `<span class="editor-hint">Drag a control to move it. Pick one to size it.</span>
+      <label>Size <input type="range" min="0.6" max="1.8" step="0.05" value="1" data-size disabled></label>
+      <label>Opacity <input type="range" min="0.25" max="1" step="0.05" data-opacity></label>
+      <button type="button" class="button small-button" data-reset>Reset</button>
+      <button type="button" class="button small-button primary" data-done>Done</button>`;
+    container.appendChild(bar);
+    const size = bar.querySelector('[data-size]');
+    const fade = bar.querySelector('[data-opacity]');
+    fade.value = alpha;
+    let selected = null;
+    const units = [...stage.querySelectorAll('[data-control]')].filter((element) => element.parentElement !== built.dpad);
+
+    function select(element) {
+      if (selected) selected.classList.remove('editing');
+      selected = element;
+      if (!element) {
+        size.disabled = true;
+        return;
+      }
+      element.classList.add('editing');
+      size.disabled = false;
+      size.value = (places[element.dataset.control] && places[element.dataset.control].s) || 1;
+    }
+
+    for (const element of units) {
+      element.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        select(element);
+        element.setPointerCapture(event.pointerId);
+        const move = (next) => {
+          const id = element.dataset.control;
+          const x = Math.min(0.98, Math.max(0.02, next.clientX / window.innerWidth));
+          const y = Math.min(0.98, Math.max(0.02, next.clientY / window.innerHeight));
+          places[id] = { ...(places[id] || {}), x, y };
+          placeControl(element, places[id]);
+        };
+        const up = () => {
+          element.removeEventListener('pointermove', move);
+          element.removeEventListener('pointerup', up);
+          element.removeEventListener('pointercancel', up);
+        };
+        element.addEventListener('pointermove', move);
+        element.addEventListener('pointerup', up);
+        element.addEventListener('pointercancel', up);
+      });
+    }
+    stage.addEventListener('pointerdown', (event) => { if (event.target === stage) select(null); });
+    size.oninput = () => {
+      if (!selected) return;
+      const id = selected.dataset.control;
+      places[id] = { ...(places[id] || {}), s: parseFloat(size.value) };
+      placeControl(selected, places[id]);
+    };
+    fade.oninput = () => {
+      alpha = parseFloat(fade.value);
+      stage.style.opacity = alpha < 1 ? String(alpha) : '';
+    };
+    bar.querySelector('[data-reset]').onclick = () => {
+      for (const key of Object.keys(places)) delete places[key];
+      for (const element of units) placeControl(element, null);
+      alpha = 1;
+      fade.value = 1;
+      stage.style.opacity = '';
+      select(null);
+    };
+    bar.querySelector('[data-done]').onclick = () => {
+      container.textContent = '';
+      onDone(places, alpha);
+    };
+  }
+
   function onController(listener) {
     controllerListener = listener;
   }
 
-  return { attach, pollGamepads, setLookSensitivity, pressBack, onController, connectedControllers };
+  return { attach, pollGamepads, setLookSensitivity, pressBack, onController, connectedControllers, setTouchLayout,
+    editTouchLayout, isTouchEnabled: () => touchEnabled };
 })();

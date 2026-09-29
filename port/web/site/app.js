@@ -38,7 +38,8 @@ can run the game, copies the game data out of the player's disc image
   // ---------- settings (this browser's; nothing else depends on them)
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
-  const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: false, silentSound: true };
+  const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: false, silentSound: true,
+    touchCustom: {}, touchOpacity: 1 };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
@@ -453,6 +454,71 @@ can run the game, copies the game data out of the player's disc image
     setTimeout(() => URL.revokeObjectURL(link.href), 60000);
   }
 
+  // ---------- restoring saved games: a .zip from Export saved games (or any
+  // .zip holding a save folder), into the chosen copy of the game
+
+  async function unzip(file) {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const view = new DataView(data.buffer);
+    let end = -1;
+    for (let i = data.length - 22; i >= Math.max(0, data.length - 65557); i--) {
+      if (view.getUint32(i, true) === 0x06054b50) { end = i; break; }
+    }
+    if (end < 0) throw new Error('This is not a .zip file.');
+    const count = view.getUint16(end + 10, true);
+    let entry = view.getUint32(end + 16, true);
+    const files = [];
+    for (let n = 0; n < count; n++) {
+      if (view.getUint32(entry, true) !== 0x02014b50) throw new Error('The .zip file is damaged.');
+      const method = view.getUint16(entry + 10, true);
+      const compressed = view.getUint32(entry + 20, true);
+      const nameLength = view.getUint16(entry + 28, true);
+      const extraLength = view.getUint16(entry + 30, true);
+      const commentLength = view.getUint16(entry + 32, true);
+      const local = view.getUint32(entry + 42, true);
+      const name = new TextDecoder().decode(data.subarray(entry + 46, entry + 46 + nameLength));
+      entry += 46 + nameLength + extraLength + commentLength;
+      if (name.endsWith('/')) continue;
+      const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+      let bytes = data.subarray(start, start + compressed);
+      if (method === 8) {
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+      } else if (method !== 0) {
+        throw new Error(`${name} is compressed in a way this page cannot read.`);
+      }
+      files.push({ name, bytes });
+    }
+    return files;
+  }
+
+  async function onSavesChosen(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    const game = selectedGame();
+    if (!file || !game) return;
+    try {
+      const entries = await unzip(file);
+      // the save folder wherever it is in the .zip (halo-saves.zip has it at
+      // the top), and config.toml beside it
+      const files = [];
+      for (const { name, bytes } of entries) {
+        const parts = name.split('/').filter((part) => part && part !== '.' && part !== '..');
+        const at = parts.indexOf('save');
+        if (at >= 0 && parts.length > at + 1) files.push({ path: parts.slice(at), bytes });
+        else if (parts[parts.length - 1] === 'config.toml') files.push({ path: ['config.toml'], bytes });
+      }
+      if (!files.some((f) => f.path[0] === 'save')) throw new Error('The .zip file has no save folder in it.');
+      if (!confirm(`Restore ${files.length} files into ${game.name}? Saved games with the same names are replaced.`)) return;
+      await workerTask({ op: 'write-files', target: game.path, files });
+      toast(`Restored ${files.length} files into ${game.name}.`);
+      log(`restored ${files.length} files from ${file.name}`);
+    } catch (error) {
+      toast('Cannot restore the saved games: ' + error.message, 6000);
+      log('restore: ' + error);
+    }
+  }
+
   async function deleteData() {
     if (!state.games.length) return;
     if (!confirm('Delete every copy of the game and the saved games of the copies added after the first?')) return;
@@ -464,6 +530,83 @@ can run the game, copies the game data out of the player's disc image
     settings.game = null;
     saveSettings();
     refreshGames();
+  }
+
+  // ---------- the touch layout editor and the in-game menu
+
+  function openLayoutEditor(layout, then) {
+    const editor = $('layout-editor');
+    editor.hidden = false;
+    const custom = (settings.touchCustom || {})[layout] || {};
+    HaloInput.editTouchLayout(editor, layout, custom, settings.touchOpacity, (places, opacity) => {
+      editor.hidden = true;
+      settings.touchCustom = { ...(settings.touchCustom || {}), [layout]: places };
+      settings.touchOpacity = opacity;
+      saveSettings();
+      if (then) then();
+    });
+  }
+
+  function applyTouchLayout() {
+    HaloInput.setTouchLayout(settings.touchLayout, (settings.touchCustom || {})[settings.touchLayout], settings.touchOpacity);
+  }
+
+  function openGameMenu() {
+    $('menu-look').value = settings.look;
+    $('menu-layout').value = settings.touchLayout;
+    $('menu-layout-row').hidden = !HaloInput.isTouchEnabled();
+    $('menu-silent').checked = settings.silentSound;
+    $('menu-fps').checked = !$('fps').hidden;
+    const games = $('menu-game');
+    games.textContent = '';
+    const current = selectedGame();
+    for (const game of state.games) {
+      const option = document.createElement('option');
+      option.value = game.id;
+      option.textContent = game.name;
+      option.selected = !!(current && current.id === game.id);
+      games.appendChild(option);
+    }
+    $('menu-game-row').hidden = state.games.length < 2;
+    $('game-menu').hidden = false;
+  }
+
+  function closeGameMenu() {
+    $('game-menu').hidden = true;
+  }
+
+  function setUpGameMenu() {
+    $('menu-button').hidden = false;
+    $('menu-button').onclick = openGameMenu;
+    $('menu-resume').onclick = closeGameMenu;
+    $('game-menu').addEventListener('click', (event) => { if (event.target === $('game-menu')) closeGameMenu(); });
+    $('menu-look').oninput = (event) => {
+      settings.look = parseFloat(event.target.value);
+      saveSettings();
+      HaloInput.setLookSensitivity(settings.look);
+    };
+    $('menu-layout').onchange = (event) => {
+      settings.touchLayout = event.target.value;
+      saveSettings();
+      applyTouchLayout();
+    };
+    $('menu-edit-layout').onclick = () => {
+      closeGameMenu();
+      openLayoutEditor(settings.touchLayout, applyTouchLayout);
+    };
+    $('menu-silent').onchange = (event) => setSilentSound(event.target.checked);
+    $('menu-fps').onchange = (event) => {
+      settings.showTiming = event.target.checked;
+      saveSettings();
+      if (event.target.checked) showFrameRate();
+      else $('fps').hidden = true;
+    };
+    $('menu-switch-game').onclick = () => {
+      settings.game = $('menu-game').value;
+      saveSettings();
+      location.reload();
+    };
+    $('menu-quit').onclick = () => location.reload();
   }
 
   // ---------- controllers on the start page
@@ -538,11 +681,12 @@ can run the game, copies the game data out of the player's disc image
   // animation frames the page had in that second
   function showFrameRate() {
     const view = $('fps');
-    let frames = 0, ticks = 0, last = performance.now();
     view.hidden = false;
+    if (state.frameRateTimer) return;
+    let frames = 0, ticks = 0, last = performance.now();
     const tick = () => { ticks++; requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
-    setInterval(() => {
+    state.frameRateTimer = setInterval(() => {
       const now = performance.now();
       const seconds = (now - last) / 1000;
       const shown = (state.presented || 0) - frames;
@@ -611,6 +755,18 @@ can run the game, copies the game data out of the player's disc image
     state.silentAudio = element;
   }
 
+  function setSilentSound(on) {
+    settings.silentSound = on;
+    saveSettings();
+    if (on) {
+      if (state.silentAudio) state.silentAudio.play().catch(() => {});
+      else playThroughSilentSwitch();
+    } else {
+      try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch { /* not settable */ }
+      if (state.silentAudio) state.silentAudio.pause();
+    }
+  }
+
   // a call, Siri or another app can stop the sound; the next touch or key
   // starts it again
   function keepAudioRunning() {
@@ -676,9 +832,11 @@ can run the game, copies the game data out of the player's disc image
     // the controller's B does, instead of leaving the game
     history.pushState({ playing: true }, '');
     window.addEventListener('popstate', () => {
-      HaloInput.pressBack();
+      if (!$('game-menu').hidden) closeGameMenu();
+      else if ($('layout-editor').hidden) HaloInput.pressBack();
       history.pushState({ playing: true }, '');
     });
+    setUpGameMenu();
 
     const canvas = $('screen');
     const context = canvas.getContext('bitmaprenderer');
@@ -735,6 +893,8 @@ can run the game, copies the game data out of the player's disc image
           touchRoot: $('touch'),
           touch: settings.touch,
           touchLayout: settings.touchLayout,
+          touchCustom: (settings.touchCustom || {})[settings.touchLayout],
+          touchOpacity: settings.touchOpacity,
         });
         HaloInput.setLookSensitivity(settings.look);
         HaloInput.onController((name, connected) => {
@@ -892,6 +1052,10 @@ can run the game, copies the game data out of the player's disc image
     $('opt-look').value = settings.look;
     $('opt-vsync').checked = settings.vsync;
     $('opt-touch').onchange = (event) => { settings.touch = event.target.checked; saveSettings(); };
+    $('edit-layout').onclick = (event) => {
+      event.preventDefault();
+      openLayoutEditor($('opt-layout').value);
+    };
     $('opt-layout').value = settings.touchLayout;
     $('opt-layout').onchange = (event) => { settings.touchLayout = event.target.value; saveSettings(); };
     $('opt-look').oninput = (event) => {
@@ -909,6 +1073,7 @@ can run the game, copies the game data out of the player's disc image
     $('iso-file').onchange = onImageChosen;
     $('play').onclick = play;
     $('export-saves').onclick = exportSaves;
+    $('import-saves-file').onchange = onSavesChosen;
     $('delete-data').onclick = deleteData;
     $('show-log').onclick = async () => {
       $('log-text').textContent = await fullLog();

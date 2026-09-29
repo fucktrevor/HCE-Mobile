@@ -87,7 +87,8 @@
         <select id="opt-layout">
           <option value="modern">Modern (like mobile shooters)</option>
           <option value="xbox">Original Xbox controller</option>
-        </select></label>
+        </select>
+        <button type="button" class="button small-button" id="edit-layout">Edit layout</button></label>
       <label class="row">Aim sensitivity <input type="range" id="opt-look" min="0.4" max="3" step="0.1"></label>
       <label class="row"><input type="checkbox" id="opt-silent" checked> Sound when the phone is on silent (pauses music from other apps)</label>
       <label class="row"><input type="checkbox" id="opt-vsync" checked> Wait for the display (smoother, saves battery)</label>
@@ -99,6 +100,8 @@
       <label class="row">TURN password <input type="password" id="opt-turn-password" autocomplete="off"></label>
       <div class="row buttons">
         <button type="button" class="button" id="export-saves">Export saved games</button>
+        <label class="button" for="import-saves-file">Restore saved games…</label>
+        <input id="import-saves-file" type="file" accept=".zip,application/zip" hidden>
         <button type="button" class="button" id="show-log">Show log</button>
         <button type="button" class="button danger" id="delete-data">Delete all game data</button>
       </div>
@@ -111,6 +114,31 @@
   </section>
 </main>
 
+<button type="button" id="menu-button" class="menu-button" aria-label="Menu" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+</button>
+<div id="game-menu" class="overlay game-menu" hidden>
+  <div class="panel">
+    <h2>Menu</h2>
+    <label class="row">Aim sensitivity <input type="range" id="menu-look" min="0.4" max="3" step="0.1"></label>
+    <label class="row" id="menu-layout-row">Touch layout
+      <select id="menu-layout">
+        <option value="modern">Modern (like mobile shooters)</option>
+        <option value="xbox">Original Xbox controller</option>
+      </select>
+      <button type="button" class="button small-button" id="menu-edit-layout">Edit layout</button></label>
+    <label class="row"><input type="checkbox" id="menu-silent"> Sound when the phone is on silent</label>
+    <label class="row"><input type="checkbox" id="menu-fps"> Show the frame rate</label>
+    <label class="row" id="menu-game-row">Game
+      <select id="menu-game"></select>
+      <button type="button" class="button small-button" id="menu-switch-game">Restart with it</button></label>
+    <div class="row buttons">
+      <button type="button" class="button" id="menu-quit">Quit to the start page</button>
+      <button type="button" class="button primary" id="menu-resume">Resume</button>
+    </div>
+  </div>
+</div>
+<div id="layout-editor" class="layout-editor" hidden></div>
 <div id="rotate" class="overlay" hidden><p>Turn your device sideways to play.</p></div>
 <div id="toast" class="toast" hidden></div>
 <div id="fatal" class="overlay fatal" hidden>

@@ -183,6 +183,25 @@ async function extract(file, target = [], name = '') {
 onmessage = async (event) => {
   const message = event.data;
   try {
+    if (message.op === 'write-files') {
+      // restored saved games: [{ path: ['save', 'x', 'y'], bytes }] under the copy's folder
+      const base = await folder(message.target, true);
+      for (const { path, bytes } of message.files) {
+        let directory = base;
+        for (const name of path.slice(0, -1)) directory = await directory.getDirectoryHandle(name, { create: true });
+        const handle = await directory.getFileHandle(path[path.length - 1], { create: true });
+        const access = await handle.createSyncAccessHandle();
+        try {
+          await access.truncate(0);
+          await access.write(bytes, { at: 0 });
+          await access.flush();
+        } finally {
+          await access.close();
+        }
+      }
+      postMessage({ type: 'done', files: message.files.length });
+      return;
+    }
     if (message.op === 'rename') {
       const directory = await folder(message.target, false);
       let info = {};
