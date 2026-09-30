@@ -282,6 +282,11 @@ definition's signature */
 short unit_get_local_player_index(long unit_index);
 #endif
 
+#ifdef HALO_WEB
+/* port/linux/game/custom_content.c */
+real custom_content_speed_scale(void);
+#endif
+
 /* ---------- constants */
 
 enum
@@ -3745,6 +3750,10 @@ static void biped_update_moving(
 				{
 					body_stun_scale =
 						player_get(biped->unit.player_index)->speed_multiplier;
+#ifdef HALO_WEB
+					/* custom content: the speed boost rule */
+					body_stun_scale *= custom_content_speed_scale();
+#endif
 				}
 
 				crouch = biped->biped.crouch;

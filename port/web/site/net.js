@@ -32,6 +32,9 @@ const HaloNet = (() => {
   ];
   const STUN = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
   const HELLO_INTERVAL = 3000;
+  // the game rules a room's host sets for everyone (web_shared.h WEB_CUSTOM_*:
+  // not invincibility or the camera, which are each player's own)
+  const RULES_MASK = 0x3f;
   const PEER_TIMEOUT = 20000;
   const PACKET_HEADER = 24;
   const KIND = { DATAGRAM: 1, OPEN: 2, DATA: 3, CLOSE: 4, REFUSE: 5 };
@@ -54,6 +57,8 @@ const HaloNet = (() => {
     helloTimer: null,
     chatHeard: new Map(), // id -> when its last chat message came
     chatSent: 0,
+    rules: 0,            // the game rules this machine gives the room, as its host
+    rulesHost: false,
   };
 
   function randomId() {
@@ -246,7 +251,11 @@ const HaloNet = (() => {
   // ---------- peers
 
   function hello() {
-    publish({ type: 'hello', address: state.address, name: playerName() });
+    const message = { type: 'hello', address: state.address, name: playerName() };
+    // the room's game rules, from its host (so a player who comes in later
+    // has them within a few seconds)
+    if (state.rulesHost) message.rules = state.rules;
+    publish(message);
   }
 
   function playerName() {
@@ -306,6 +315,12 @@ const HaloNet = (() => {
   }
 
   async function handleSignal(message) {
+    if (message.type === 'hello' || message.type === 'rules') {
+      if (typeof message.rules === 'number' && !state.rulesHost) {
+        emit('rules', { rules: message.rules & RULES_MASK, name: String(message.name || 'Player').slice(0, 24) });
+      }
+      if (message.type === 'rules') return;
+    }
     if (message.type === 'hello') {
       const known = state.peers.get(message.from);
       const peer = peerFor(message.from, message.address, message.name);
@@ -507,6 +522,14 @@ const HaloNet = (() => {
     emit('status', status());
   }
 
+  // Custom content: the host's game rules, which everyone in the room plays by
+  function setRules(rules, host) {
+    const changed = state.rules !== (rules & RULES_MASK) || state.rulesHost !== !!host;
+    state.rules = rules & RULES_MASK;
+    state.rulesHost = !!host;
+    if (changed && host && state.room) publish({ type: 'rules', rules: state.rules, name: playerName() }).catch(() => {});
+  }
+
   // Text chat, to everyone in the room, over the room's (encrypted) topic
   async function sendChat(text) {
     text = String(text || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, CHAT_LENGTH);
@@ -531,6 +554,6 @@ const HaloNet = (() => {
 
   state.address = localAddress();
 
-  return { attach, join, leave, newRoomCode, on, status, addressText, sendChat, CHAT_LENGTH,
+  return { attach, join, leave, newRoomCode, on, status, addressText, sendChat, CHAT_LENGTH, setRules, RULES_MASK,
     get address() { return state.address; } };
 })();

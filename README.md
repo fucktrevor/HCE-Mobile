@@ -4,7 +4,10 @@
 
 Halo CE Mobile is Halo: Combat Evolved as an installable web app: the game
 compiled to WebAssembly, with touch and controller input, online System Link
-play, and a game library for your own disc images. It is a fork of
+play with matchmaking and text chat, custom content (game rules like low
+gravity and big heads, a third-person camera, and playing the campaign as a
+Grunt, an Elite, a Hunter and more), and a game library for your own disc
+images. It is a fork of
 [cybersecurity/halo-ce-universal](https://github.com/cybersecurity/halo-ce-universal),
 the Linux, Windows and Android ports of the Halo CE decompilation by
 [punpckhdq/halo](https://github.com/punpckhdq/halo) and

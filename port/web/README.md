@@ -199,6 +199,36 @@ How it works (`site/net.js`, `src/web_net.c`):
 The web build does not play with the desktop and Android builds' internet
 play, which uses UDP.
 
+## Custom content
+
+*Custom content* (on the start page, and in the game's menu at the top
+left) changes the game while it runs:
+
+- Game rules, in the campaign and in multiplayer: infinite ammo, low gravity,
+  speed boost, super jump, big heads and one-shot kills. Online, everyone in
+  a room plays by its host's rules (the page of whoever opened the room sends
+  them to the others, who cannot change them while they are there).
+- Invincible, in the campaign.
+- Play as another character in the campaign: a Marine, a Grunt, a Jackal, an
+  Elite, a Hunter, a Flood combat form or Elite, an Infection form, a
+  Sentinel, 343 Guilty Spark or Captain Keyes. The player becomes that
+  character where they stand, armed as the level arms it, with the camera
+  following from behind. A level has only the characters it uses: where the
+  character is missing the player stays the Master Chief, and the page says
+  so. Covenant and Flood characters have no HUD.
+- A third-person camera, just for the player who turns it on.
+
+The page writes its choices into the memory it shares with the game
+(`src/web_shared.h`, `src/web_custom.c`); each frame the game applies them
+(`port/linux/game/custom_content.c`, with small `HALO_WEB` hooks in
+`game/cheats.c`, `units/bipeds.c`, `units/units.c` and `camera/director.c`).
+The rules use the game's own cheats where it has them (infinite ammo,
+bottomless clip, super jump, the one-hit-kill "omnipotent" cheat,
+deathless player); gravity scales the game's gravity, speed the player's
+running speed, and big heads scale each biped's head node and those below
+it. Playing another character swaps the player's unit for a new one of that
+biped, as the game's own "bump possession" cheat does.
+
 ## How the port operates
 
 ### WebAssembly

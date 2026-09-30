@@ -1071,3 +1071,16 @@ body:not(.playing) .chat-feed { display: none; }
   color: var(--text);
   font: 16px -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
 }
+
+/* custom content: the start page's section and the panel */
+.custom-games { margin-top: 18px; border-top: 1px solid var(--panel-edge); padding-top: 4px; }
+.custom-games #custom-summary.on { color: var(--accent); }
+.custom { z-index: 29; background: rgba(9, 15, 25, 0.985); }
+.custom-body { flex: 1; overflow-y: auto; padding: 0 2px; }
+.custom-body h3 { margin: 14px 0 2px; font: 700 14px/1.3 var(--ui-font); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.custom-body h3:first-of-type { margin-top: 4px; }
+.custom-rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); column-gap: 12px; }
+.custom-body select { min-height: 36px; border-radius: 8px; border: 1px solid var(--panel-edge); background: #0e1117; color: var(--text); padding: 0 8px; flex: 1; min-width: 0; }
+.custom-body label.locked { opacity: 0.55; }
+#custom-character-status.on { color: #9fe870; }
+#custom-character-status.off { color: #ffcf6e; }

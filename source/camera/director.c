@@ -138,6 +138,11 @@ symbols in this file:
 #include "units/unit_definitions.h"
 #include "units/units.h"
 
+#ifdef HALO_WEB
+/* port/linux/game/custom_content.c */
+boolean custom_content_third_person(long unit_index);
+#endif
+
 /* ---------- constants */
 
 /* ---------- macros */
@@ -367,6 +372,15 @@ short director_desired_perspective(
 
 		if (*perspective == 1 || *perspective == 3)
 			following = TRUE;
+#ifdef HALO_WEB
+		/* custom content: the third-person camera, on foot (a perspective
+		of its own, so that turning it on or off changes the camera) */
+		if (!following && custom_content_third_person(unit_index))
+		{
+			following = TRUE;
+			*perspective = 4;
+		}
+#endif
 	}
 
 	return following;

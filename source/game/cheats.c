@@ -114,9 +114,18 @@ void cheats_dispose_from_old_map(
 	return;
 }
 
+#ifdef HALO_WEB
+/* port/linux/game/custom_content.c */
+void custom_content_update(void);
+void custom_content_new_map(void);
+#endif
+
 void cheats_update(
 	void)
 {
+#ifdef HALO_WEB
+	custom_content_update();
+#endif
 	if (cheat.controller_enabled)
 	{
 		short local_player_index;
@@ -227,6 +236,9 @@ static long cheat_player_index(
 void cheats_initialize_for_new_map(
 	void)
 {
+#ifdef HALO_WEB
+	custom_content_new_map();
+#endif
 	cheats_load();
 
 	return;

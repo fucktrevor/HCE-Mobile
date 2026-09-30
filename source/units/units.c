@@ -688,6 +688,11 @@ symbols in this file:
 #include "sound/game_sound.h"
 #include "vehicles.h"
 
+#ifdef HALO_WEB
+/* port/linux/game/custom_content.c */
+void custom_content_postprocess_unit(long unit_index, real_matrix4x3 *node_matrices);
+#endif
+
 /* ---------- constants */
 
 enum
@@ -10961,6 +10966,11 @@ void unit_postprocess_node_matrices(
 			}
 		}
 	}
+
+#ifdef HALO_WEB
+	/* custom content: the big heads rule */
+	custom_content_postprocess_unit(unit_index, node_matrices);
+#endif
 
 	return;
 }

@@ -108,7 +108,14 @@ struct web_shared_state
 	volatile int32_t page_hidden;
 	/* the game's state for the page: 1 once the game's window opened */
 	volatile int32_t game_started;
-	volatile int32_t reserved[16];
+	/* custom content (port/linux/game/custom_content.c): the page's game
+	rules (WEB_CUSTOM_* bits) and the character to play as in the campaign
+	(WEB_CHARACTER_*); the game answers with how the last choice of
+	character went (WEB_CHARACTER_STATUS_*) */
+	volatile int32_t custom_rules;
+	volatile int32_t custom_character;
+	volatile int32_t custom_character_status;
+	volatile int32_t reserved[13];
 
 	/* online play (web_net.c, port/web/site/net.js): this machine's address
 	on the players' network (network byte order, from the page), and the
@@ -121,6 +128,45 @@ struct web_shared_state
 	volatile int32_t net_in_read;
 	unsigned char net_out[WEB_NET_OUT_BYTES];
 	unsigned char net_in[WEB_NET_IN_BYTES];
+};
+
+/* custom content: game rules (the room's host's, online) */
+enum
+{
+	WEB_CUSTOM_INFINITE_AMMO = 1 << 0,
+	WEB_CUSTOM_LOW_GRAVITY = 1 << 1,
+	WEB_CUSTOM_SPEED_BOOST = 1 << 2,
+	WEB_CUSTOM_SUPER_JUMP = 1 << 3,
+	WEB_CUSTOM_BIG_HEADS = 1 << 4,
+	WEB_CUSTOM_ONE_SHOT_KILLS = 1 << 5,
+	WEB_CUSTOM_INVINCIBLE = 1 << 6,      /* the campaign only */
+	WEB_CUSTOM_THIRD_PERSON = 1 << 7,    /* this player's camera */
+};
+
+/* the characters to play as in the campaign (0: the level's own) */
+enum
+{
+	WEB_CHARACTER_DEFAULT,
+	WEB_CHARACTER_MASTER_CHIEF,
+	WEB_CHARACTER_MARINE,
+	WEB_CHARACTER_GRUNT,
+	WEB_CHARACTER_JACKAL,
+	WEB_CHARACTER_ELITE,
+	WEB_CHARACTER_HUNTER,
+	WEB_CHARACTER_FLOOD_HUMAN,
+	WEB_CHARACTER_FLOOD_ELITE,
+	WEB_CHARACTER_INFECTION_FORM,
+	WEB_CHARACTER_SENTINEL,
+	WEB_CHARACTER_MONITOR,
+	WEB_CHARACTER_KEYES,
+	NUMBER_OF_WEB_CHARACTERS
+};
+
+enum
+{
+	WEB_CHARACTER_STATUS_NONE,       /* nothing asked, or not in a campaign level */
+	WEB_CHARACTER_STATUS_PLAYING,    /* playing as the character asked for */
+	WEB_CHARACTER_STATUS_NOT_HERE,   /* the level has no such character */
 };
 
 /* a packet in the rings: this header, then the payload, padded to 4 bytes;

@@ -33,13 +33,15 @@ can run the game, copies the game data out of the player's disc image
     version: null,
     games: [],       // the installed copies of the game (listGames)
     importing: null, // the id of the copy being imported
+    roomRules: null, // online: the room host's game rules (custom content)
+    roomRulesFrom: '',
   };
 
   // ---------- settings (this browser's; nothing else depends on them)
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
   const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: false, silentSound: true,
-    touchCustom: {}, touchOpacity: 1 };
+    touchCustom: {}, touchOpacity: 1, customRules: 0, customCharacter: 0 };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
@@ -591,6 +593,10 @@ can run the game, copies the game data out of the player's disc image
     $('menu-button').hidden = false;
     $('menu-button').onclick = openGameMenu;
     $('menu-resume').onclick = closeGameMenu;
+    $('menu-custom').onclick = () => {
+      closeGameMenu();
+      openCustom();
+    };
     $('game-menu').addEventListener('click', (event) => { if (event.target === $('game-menu')) closeGameMenu(); });
     $('menu-look').oninput = (event) => {
       settings.look = parseFloat(event.target.value);
@@ -757,12 +763,12 @@ can run the game, copies the game data out of the player's disc image
 
   function readOffsets(module) {
     const pointer = module._web_shared_offsets();
-    const words = new Int32Array(state.memory.buffer, pointer, 32);
+    const words = new Int32Array(state.memory.buffer, pointer, 35);
     const names = ['size', 'eventWrite', 'eventRead', 'events', 'eventSize', 'gamepads', 'gamepadSize',
       'displayWidth', 'displayHeight', 'frameCounter', 'framesPresented', 'vsync', 'audioRate', 'audioOpen',
       'audioWrite', 'audioRead', 'audioUnderruns', 'audioRing', 'audioRingFrames', 'pageHidden', 'gameStarted',
       'eventCapacity', 'gamepadCount', 'netLocalAddress', 'netOutWrite', 'netOutRead', 'netInWrite', 'netInRead',
-      'netOut', 'netOutBytes', 'netIn', 'netInBytes'];
+      'netOut', 'netOutBytes', 'netIn', 'netInBytes', 'customRules', 'customCharacter', 'customCharacterStatus'];
     const offsets = {};
     names.forEach((name, index) => { offsets[name] = words[index]; });
     return offsets;
@@ -939,7 +945,8 @@ can run the game, copies the game data out of the player's disc image
     // the controller's B does, instead of leaving the game
     history.pushState({ playing: true }, '');
     window.addEventListener('popstate', () => {
-      if (!$('chat').hidden) closeChat();
+      if (!$('custom').hidden) closeCustom();
+      else if (!$('chat').hidden) closeChat();
       else if (!$('game-menu').hidden) closeGameMenu();
       else if ($('layout-editor').hidden) HaloInput.pressBack();
       history.pushState({ playing: true }, '');
@@ -1010,6 +1017,7 @@ can run the game, copies the game data out of the player's disc image
           toast(connected ? `Controller connected: ${name}` : 'Controller disconnected', 2500);
         });
         HaloNet.attach({ memory: state.memory, base: state.shared, offsets: state.offsets });
+        applyCustom();
         $('touch').hidden = !settings.touch;
         requestAnimationFrame(animationFrame);
         // controllers are also read between animation frames, so a press
@@ -1025,6 +1033,125 @@ can run the game, copies the game data out of the player's disc image
     script.src = 'halo.js';
     script.onerror = () => fatal('Could not load halo.js.');
     document.body.appendChild(script);
+  }
+
+  // ---------- custom content (port/linux/game/custom_content.c): game rules
+  // and the character to play as, which the game reads from the shared state
+  // each frame. Online, the room's host's rules are everyone's.
+
+  const RULE_NAMES = { 1: 'Infinite ammo', 2: 'Low gravity', 4: 'Speed boost', 8: 'Super jump', 16: 'Big heads',
+    32: 'One-shot kills', 64: 'Invincible', 128: 'Third-person camera' };
+  const CHARACTER_NAMES = ['', 'Master Chief', 'Marine', 'Grunt', 'Jackal', 'Elite', 'Hunter', 'Flood combat form',
+    'Flood Elite', 'Infection form', 'Sentinel', '343 Guilty Spark', 'Captain Keyes'];
+
+  // following the host's rules: in a room someone else hosts, once they are heard
+  function followingHost() {
+    return state.roomRules !== null && state.onlineRole !== 'host' && !!HaloNet.status().room;
+  }
+
+  function effectiveRules() {
+    const mine = settings.customRules | 0;
+    if (!followingHost()) return mine;
+    return (state.roomRules & HaloNet.RULES_MASK) | (mine & ~HaloNet.RULES_MASK);
+  }
+
+  function characterStatus() {
+    if (!state.shared) return 0;
+    return Atomics.load(new Int32Array(state.memory.buffer), sharedWord('customCharacterStatus'));
+  }
+
+  function renderCustom() {
+    const rules = effectiveRules();
+    const following = followingHost();
+    for (const box of document.querySelectorAll('#custom [data-rule]')) {
+      const bit = Number(box.dataset.rule);
+      const shared = (bit & HaloNet.RULES_MASK) !== 0;
+      box.checked = (rules & bit) !== 0;
+      box.disabled = following && shared;
+      box.closest('label').classList.toggle('locked', box.disabled);
+    }
+    const host = $('custom-host');
+    host.hidden = !following;
+    host.textContent = following ? `You play by ${state.roomRulesFrom || 'the host'}'s rules (the room's host).` : '';
+    $('custom-character').value = String(settings.customCharacter | 0);
+    const status = $('custom-character-status');
+    const character = settings.customCharacter | 0;
+    const code = characterStatus();
+    status.className = 'small';
+    if (!character) status.textContent = '';
+    else if (!state.started) status.textContent = `You'll play as the ${CHARACTER_NAMES[character]} wherever the level has one.`;
+    else if (code === 1) {
+      status.textContent = `Playing as the ${CHARACTER_NAMES[character]}.`;
+      status.classList.add('on');
+    } else if (code === 2) {
+      status.textContent = `This level has no ${CHARACTER_NAMES[character]}: you're the Master Chief here.`;
+      status.classList.add('off');
+    } else status.textContent = `You'll play as the ${CHARACTER_NAMES[character]} in the campaign, wherever the level has one.`;
+
+    // the start page's line
+    const names = Object.keys(RULE_NAMES).map(Number).filter((bit) => rules & bit).map((bit) => RULE_NAMES[bit]);
+    if (character) names.push(`Play as ${CHARACTER_NAMES[character]}`);
+    const summary = $('custom-summary');
+    summary.textContent = names.length ? names.join(' · ') + (following ? ' (the room host\'s rules)' : '') :
+      'Off: the game as it shipped.';
+    summary.classList.toggle('on', names.length > 0);
+  }
+
+  function applyCustom() {
+    HaloNet.setRules(settings.customRules | 0, state.onlineRole === 'host');
+    if (state.shared) {
+      const i32 = new Int32Array(state.memory.buffer);
+      Atomics.store(i32, sharedWord('customRules'), effectiveRules());
+      Atomics.store(i32, sharedWord('customCharacter'), settings.customCharacter | 0);
+    }
+    renderCustom();
+  }
+
+  function openCustom() {
+    renderCustom();
+    $('custom').hidden = false;
+    // (the game's answer about the character comes a frame or so later)
+    clearInterval(state.customTimer);
+    state.customTimer = setInterval(renderCustom, 500);
+  }
+
+  function closeCustom() {
+    $('custom').hidden = true;
+    clearInterval(state.customTimer);
+  }
+
+  function setUpCustom() {
+    for (const box of document.querySelectorAll('#custom [data-rule]')) {
+      box.onchange = () => {
+        const bit = Number(box.dataset.rule);
+        settings.customRules = box.checked ? (settings.customRules | bit) : (settings.customRules & ~bit);
+        saveSettings();
+        applyCustom();
+      };
+    }
+    $('custom-character').onchange = (event) => {
+      settings.customCharacter = parseInt(event.target.value, 10) || 0;
+      saveSettings();
+      applyCustom();
+    };
+    $('custom-open').onclick = openCustom;
+    $('custom-close').onclick = closeCustom;
+    HaloNet.on((type, detail) => {
+      if (type === 'rules') {
+        const changed = state.roomRules !== detail.rules;
+        state.roomRules = detail.rules;
+        state.roomRulesFrom = detail.name;
+        applyCustom();
+        if (changed && followingHost() && state.started) {
+          const names = Object.keys(RULE_NAMES).map(Number).filter((bit) => detail.rules & bit).map((bit) => RULE_NAMES[bit]);
+          toast(`${detail.name}'s rules: ${names.length ? names.join(', ') : 'none'}`);
+        }
+      } else if (type === 'status' && !detail.room && state.roomRules !== null) {
+        state.roomRules = null;
+        applyCustom();
+      }
+    });
+    applyCustom();
   }
 
   // ---------- online play (net.js)
@@ -1227,6 +1354,8 @@ can run the game, copies the game data out of the player's disc image
 
   function setRole(role, host) {
     state.onlineRole = role;
+    if (role === 'host') state.roomRules = null;
+    applyCustom();
     const hint = $('online-role');
     if (role === 'host') {
       hint.textContent = 'You host: in Halo, go to Multiplayer, then System Link, and start a game. Everyone in this room sees it there.';
@@ -1491,6 +1620,7 @@ can run the game, copies the game data out of the player's disc image
     watchControllers();
     await ensureIsolation();
     setUpOnline();
+    setUpCustom();
     const ok = await runChecks();
     if (!ok) return;
     // all passed: one line, the details a tap away
