@@ -258,6 +258,10 @@ can run the game, copies the game data out of the player's disc image
     $('add-label').textContent = any ? 'Add another disc image…' : 'Choose disc image…';
     $('add-label').classList.toggle('primary', !any);
     if (chosen) $('data-summary').textContent = `Plays ${chosen.name}.`;
+    // Open games compares rooms' maps with the chosen copy's
+    if (window.HaloLobby && state.lobbyStarted) {
+      HaloLobby.mapsFingerprint(chosen).then((maps) => { state.lobbyMaps = maps; renderLobby(HaloLobby.rooms()); });
+    }
   }
 
   function workerTask(message, onProgress) {
@@ -1047,20 +1051,178 @@ can run the game, copies the game data out of the player's disc image
     const inRoom = !!status.room;
     $('online-join').hidden = inRoom;
     $('online-room').hidden = !inRoom;
-    if (!inRoom) return;
+    if (!inRoom) {
+      setRole(null);
+      return;
+    }
     $('online-code').textContent = status.room;
     const players = status.players === 1 ? '1 other player' : `${status.players} other players`;
     $('online-status').textContent = status.brokers ? `Connected: ${players} in the room.` :
       'Looking for the room… (checking the connection)';
     $('online-names').textContent = status.names.length ? status.names.join(', ') : '';
+    $('online-public').checked = HaloLobby.isListing();
+    $('online-note-row').hidden = !HaloLobby.isListing();
   }
 
   async function joinRoom(code) {
     try {
       const joined = await HaloNet.join(code, onlineOptions());
       try { localStorage.setItem('halo-web-room', joined); } catch { /* not kept */ }
+      // a room listed from this page stays listed only while in it
+      if (HaloLobby.isListing() && state.listedCode !== joined) await unlistRoom();
+      return joined;
     } catch (error) {
       toast(error.message);
+      return null;
+    }
+  }
+
+  // ---------- matchmaking (lobby.js): public rooms, Open games, Quick Match
+
+  const LISTED_KEY = 'halo-web-listed';
+
+  function playerName() {
+    try { return localStorage.getItem('halo-web-player-name') || 'Player'; } catch { return 'Player'; }
+  }
+
+  async function mapsFingerprint() {
+    return HaloLobby.mapsFingerprint(selectedGame());
+  }
+
+  function mapsLabel(game) {
+    if (!game) return '';
+    const names = (game.files || []).map((name) => name.toLowerCase());
+    const campaign = CAMPAIGN_MAPS.some((name) => names.includes(name));
+    return `${campaign ? 'Full game' : 'Multiplayer disc'} · ${names.length} maps`;
+  }
+
+  async function listRoom(code) {
+    const maps = await mapsFingerprint();
+    const game = selectedGame();
+    state.listedCode = code;
+    try { localStorage.setItem(LISTED_KEY, code); } catch { /* not kept */ }
+    await HaloLobby.advertise(code, () => ({
+      code,
+      host: playerName(),
+      players: (HaloNet.status().players || 0) + 1,
+      maps,
+      mapsLabel: mapsLabel(game),
+      note: $('online-note').value,
+    }));
+    showOnline(HaloNet.status());
+  }
+
+  async function unlistRoom() {
+    state.listedCode = null;
+    try { localStorage.removeItem(LISTED_KEY); } catch { /* not kept */ }
+    await HaloLobby.withdraw();
+    showOnline(HaloNet.status());
+  }
+
+  function setRole(role, host) {
+    state.onlineRole = role;
+    const hint = $('online-role');
+    if (role === 'host') {
+      hint.textContent = 'You host: in Halo, go to Multiplayer, then System Link, and start a game. Everyone in this room sees it there.';
+    } else if (role === 'guest') {
+      hint.textContent = `You joined ${host}'s room: in Halo, go to Multiplayer, then System Link, and join ${host}'s game.`;
+    }
+    hint.hidden = !role;
+  }
+
+  function renderLobby(rooms) {
+    const list = $('lobby-list');
+    list.textContent = '';
+    const current = HaloNet.status().room;
+    const mine = state.lobbyMaps;
+    for (const room of rooms) {
+      const row = document.createElement('div');
+      const sameMaps = !mine || !room.maps || room.maps === mine;
+      const here = room.code === current;
+      row.className = 'lobby-room' + (sameMaps ? '' : ' other-maps') + (here ? ' mine' : '');
+      const who = document.createElement('span');
+      who.className = 'who';
+      const title = document.createElement('strong');
+      title.textContent = `${room.host}'s game`;
+      const detail = document.createElement('small');
+      detail.textContent = [room.mapsLabel, sameMaps ? '' : 'different maps from yours', room.note].filter(Boolean).join(' · ');
+      who.append(title, detail);
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = `${room.players}/${HaloLobby.MAX_PLAYERS}`;
+      const join = document.createElement('button');
+      join.type = 'button';
+      join.className = 'button small-button';
+      join.textContent = here ? 'Joined' : room.players >= HaloLobby.MAX_PLAYERS ? 'Full' : 'Join';
+      join.disabled = here || room.players >= HaloLobby.MAX_PLAYERS;
+      join.onclick = async () => {
+        if (!sameMaps && !confirm(`${room.host}'s game uses different maps from yours, so you may not be able to play together. Join anyway?`)) return;
+        if (await joinRoom(room.code)) setRole('guest', room.host);
+      };
+      row.append(who, count, join);
+      list.appendChild(row);
+    }
+    $('lobby-empty').hidden = rooms.length > 0;
+    $('lobby-count').textContent = rooms.length ? `(${rooms.length})` : '';
+  }
+
+  async function quickMatch() {
+    if (!selectedGame()) {
+      toast('Add a disc image first (Game data).');
+      return;
+    }
+    const button = $('quick-match');
+    button.disabled = true;
+    button.textContent = 'Searching…';
+    try {
+      // the open games arrive a moment after the page connects
+      const waited = Date.now() - state.lobbyStarted;
+      if (waited < 3500) await new Promise((resolve) => setTimeout(resolve, 3500 - waited));
+      const maps = await mapsFingerprint();
+      const current = HaloNet.status().room;
+      const open = HaloLobby.rooms().filter((room) => room.maps === maps && room.code !== current &&
+        room.players < HaloLobby.MAX_PLAYERS);
+      if (open.length) {
+        const room = open[0];
+        if (await joinRoom(room.code)) {
+          setRole('guest', room.host);
+          toast(`Joined ${room.host}'s game.`);
+        }
+      } else {
+        const code = await joinRoom(HaloNet.newRoomCode());
+        if (code) {
+          await listRoom(code);
+          setRole('host');
+          toast('No open games with your maps: you opened one. Others can find it in Open games.', 5000);
+        }
+      }
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Quick Match';
+    }
+  }
+
+  async function setUpLobby() {
+    state.lobbyStarted = Date.now();
+    state.lobbyMaps = await mapsFingerprint();
+    HaloLobby.on(renderLobby);
+    HaloLobby.start(onlineOptions());
+    renderLobby(HaloLobby.rooms());
+    $('quick-match').onclick = quickMatch;
+    $('online-public').onchange = async (event) => {
+      const code = HaloNet.status().room;
+      if (event.target.checked && code) await listRoom(code);
+      else await unlistRoom();
+    };
+    $('online-note').onchange = () => HaloLobby.refresh();
+    // the player count of a listed room follows the room
+    HaloNet.on((type) => { if (type === 'joined' || type === 'left') HaloLobby.refresh(); });
+    // a room listed before the page was reloaded is listed again
+    let listed = null;
+    try { listed = localStorage.getItem(LISTED_KEY); } catch { /* none */ }
+    if (listed && HaloNet.status().room === listed) {
+      await listRoom(listed);
+      setRole('host');
     }
   }
 
@@ -1076,10 +1238,11 @@ can run the game, copies the game data out of the player's disc image
     $('online-name').onchange = (event) => {
       try { localStorage.setItem('halo-web-player-name', event.target.value.trim().slice(0, 24)); } catch { /* none */ }
     };
-    $('online-create').onclick = () => joinRoom(HaloNet.newRoomCode());
+    $('online-create').onclick = async () => { if (await joinRoom(HaloNet.newRoomCode())) setRole('host'); };
     $('online-enter').onclick = () => joinRoom($('online-input').value);
     $('online-input').onkeydown = (event) => { if (event.key === 'Enter') joinRoom(event.target.value); };
     $('online-leave').onclick = async () => {
+      await unlistRoom();
       await HaloNet.leave();
       try { localStorage.removeItem('halo-web-room'); } catch { /* none */ }
     };
@@ -1233,6 +1396,7 @@ can run the game, copies the game data out of the player's disc image
       $('checks').appendChild(details);
     }
     await refreshGames();
+    setUpLobby().catch((error) => log('lobby: ' + error));
     checkForUpdate();
   }
 

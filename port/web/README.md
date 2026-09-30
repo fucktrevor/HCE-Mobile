@@ -156,6 +156,17 @@ game's own system link:
 2. In the game, one player hosts from *Multiplayer* > *System Link Play*
    (A or Y to start a game); the others see the game in that list and join.
 
+Matchmaking (`site/lobby.js`): *Quick Match* joins the open game with the
+most players whose host has the same maps (a fingerprint of the copy of the
+game's maps), or opens a room and lists it. *Open games* lists the public
+rooms, with their host, players, maps and note, each with *Join*; *List this
+room in Open games* lists any room. A listed room is a retained MQTT message
+on `halo-web/v1/lobby/<id>` on the same brokers, sent again every ten seconds
+and cleared when the room is left (an advert older than a minute is
+ignored). The page then says who hosts: the host starts a game from
+*Multiplayer* > *System Link*, the others join it there. Adverts are public;
+the page shows their text as text, cut to length.
+
 Everyone in a room is on one network, as on a LAN: up to the game's limits
 of machines and players, split screen on each machine included.
 
