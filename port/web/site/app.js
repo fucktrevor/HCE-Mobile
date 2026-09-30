@@ -617,6 +617,100 @@ can run the game, copies the game data out of the player's disc image
     $('menu-quit').onclick = () => location.reload();
   }
 
+  // ---------- the start page's background: a frame of the player's own
+  // game (its main menu, the first time it runs), kept in this site's storage
+  // on this device; until there is one, a starfield and a ring of its own
+
+  const BACKDROP_FILE = 'launcher-background.jpg';
+  // about 12 s into the first game, on the main menu (tests set it sooner)
+  const BACKDROP_FRAME = window.__haloBackdropFrame || 720;
+
+  async function showBackdrop() {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const file = await (await root.getFileHandle(BACKDROP_FILE)).getFile();
+      if (!file.size) return;
+      state.hasBackdrop = true;
+      const url = URL.createObjectURL(file);
+      $('backdrop').style.backgroundImage = `url("${url}")`;
+      document.body.classList.add('has-backdrop');
+    } catch { /* none yet */ }
+  }
+
+  function captureBackdrop(bitmap) {
+    try {
+      const copy = new OffscreenCanvas(bitmap.width, bitmap.height);
+      copy.getContext('2d').drawImage(bitmap, 0, 0);
+      state.hasBackdrop = true;
+      copy.convertToBlob({ type: 'image/jpeg', quality: 0.82 }).then(async (blob) => {
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        await workerTask({ op: 'write-files', target: [], files: [{ path: [BACKDROP_FILE], bytes }] });
+        log('start page background saved');
+      }).catch((error) => log('background: ' + error));
+    } catch (error) {
+      log('background: ' + error);
+    }
+  }
+
+  // ---------- the welcome: on the first visit to the site (not in the
+  // installed app), a button to install it on each kind of phone. Android's
+  // browsers install a site when asked (beforeinstallprompt); iOS lets only
+  // the person do it, from the Share sheet, so its button shows how.
+
+  const WELCOMED_KEY = 'halo-web-welcomed';
+
+  function setUpWelcome({ standalone, ios, android }) {
+    const welcome = $('welcome');
+    const sheets = { ios: $('sheet-ios'), droid: $('sheet-droid') };
+    const openSheet = (which) => {
+      welcome.hidden = false;
+      for (const key in sheets) sheets[key].hidden = key !== which;
+      welcome.classList.add('sheet-open');
+    };
+    const closeSheets = () => {
+      for (const key in sheets) sheets[key].hidden = true;
+      welcome.classList.remove('sheet-open');
+    };
+    const installAndroid = async () => {
+      if (state.installPrompt) {
+        state.installPrompt.prompt();
+        const choice = await state.installPrompt.userChoice.catch(() => null);
+        state.installPrompt = null;
+        if (choice && choice.outcome === 'accepted') {
+          $('install-android').hidden = true;
+          toast('Installing. Open Halo CE from your home screen.', 6000);
+          return;
+        }
+      }
+      openSheet('droid');
+    };
+    for (const key in sheets) {
+      sheets[key].querySelector('[data-close]').onclick = () => {
+        closeSheets();
+        if (welcome.dataset.from === 'launcher') welcome.hidden = true;
+      };
+    }
+    $('install-ios').onclick = () => openSheet('ios');
+    $('install-droid').onclick = installAndroid;
+    $('welcome-skip').onclick = () => {
+      try { localStorage.setItem(WELCOMED_KEY, '1'); } catch { /* private mode */ }
+      welcome.hidden = true;
+      closeSheets();
+    };
+    // the launcher's own hints open the same guides
+    $('install-hint-how').onclick = () => { welcome.dataset.from = 'launcher'; openSheet('ios'); };
+    $('install-android-how').onclick = () => { welcome.dataset.from = 'launcher'; openSheet('droid'); };
+    // the button for this phone first
+    if (android) $('install-droid').classList.add('primary');
+    else $('install-ios').classList.add('primary');
+    const buttons = welcome.querySelector('.install-buttons');
+    if (android) buttons.prepend($('install-droid'));
+    let welcomed = false;
+    try { welcomed = localStorage.getItem(WELCOMED_KEY) === '1'; } catch { /* private mode */ }
+    welcome.hidden = standalone || welcomed || !!window.__haloArgs;
+    welcome.dataset.from = 'first';
+  }
+
   // ---------- controllers on the start page
 
   // Browsers show a controller to a page only after one of its buttons is
@@ -870,6 +964,7 @@ can run the game, copies the game data out of the player's disc image
           canvas.width = bitmap.width;
           canvas.height = bitmap.height;
         }
+        if (state.presented === BACKDROP_FRAME && !state.hasBackdrop) captureBackdrop(bitmap);
         context.transferFromImageBitmap(bitmap);
         state.presented = (state.presented || 0) + 1;
       },
@@ -1120,12 +1215,22 @@ can run the game, copies the game data out of the player's disc image
       if (choice && choice.outcome === 'accepted') $('install-android').hidden = true;
     };
     window.addEventListener('appinstalled', () => { $('install-android').hidden = true; });
+    setUpWelcome({ standalone, ios, android });
+    showBackdrop();
 
     watchControllers();
     await ensureIsolation();
     setUpOnline();
     const ok = await runChecks();
     if (!ok) return;
+    // all passed: one line, the details a tap away
+    if (!$('checks').querySelector('.bad, .warn')) {
+      const details = document.createElement('details');
+      details.className = 'checks-ok';
+      details.innerHTML = '<summary>Ready: this device can run the game</summary>';
+      for (const element of [...$('checks').children]) details.appendChild(element);
+      $('checks').appendChild(details);
+    }
     await refreshGames();
     checkForUpdate();
   }

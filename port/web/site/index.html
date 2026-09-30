@@ -15,14 +15,60 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="backdrop" class="backdrop" aria-hidden="true"></div>
 <canvas id="screen" aria-label="Game"></canvas>
+
+<section id="welcome" class="welcome" hidden aria-labelledby="welcome-title">
+  <div class="welcome-inner">
+    <p class="kicker">Combat Evolved · on your phone</p>
+    <h1 id="welcome-title" class="title">Halo CE <span>Web</span></h1>
+    <p class="tagline">Install it to play full screen, keep your saves, and play offline.</p>
+    <div class="install-buttons">
+      <button type="button" class="button hero" id="install-ios">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18.5h2"/></svg>
+        Install on iPhone / iPad</button>
+      <button type="button" class="button hero" id="install-droid">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M6 5h12M6 18h12"/></svg>
+        Install on Android</button>
+    </div>
+    <button type="button" class="link-button" id="welcome-skip">Continue in the browser</button>
+  </div>
+
+  <div id="sheet-ios" class="sheet" hidden role="dialog" aria-labelledby="sheet-ios-title">
+    <h2 id="sheet-ios-title">Add it to your Home Screen</h2>
+    <ol class="steps">
+      <li><span class="step-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5"/><path d="M8 10H6v11h12V10h-2"/></svg></span>
+        <span>Tap <strong>Share</strong> in Safari's toolbar (at the bottom, or at the top on iPad).</span></li>
+      <li><span class="step-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span>
+        <span>Scroll down and tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</span></li>
+      <li><span class="step-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8 12l3 3 5-6"/></svg></span>
+        <span>Open <strong>Halo CE</strong> from your Home Screen. It runs full screen and keeps its data.</span></li>
+    </ol>
+    <p class="small">In Chrome or Edge on iPhone, Share is at the top right. Safari cannot add a site to the Home Screen by itself, so these steps are needed once.</p>
+    <button type="button" class="button primary" data-close>Got it</button>
+  </div>
+
+  <div id="sheet-droid" class="sheet" hidden role="dialog" aria-labelledby="sheet-droid-title">
+    <h2 id="sheet-droid-title">Install the app</h2>
+    <ol class="steps">
+      <li><span class="step-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        <span>In Chrome, tap the <strong>⋮</strong> menu at the top right.</span></li>
+      <li><span class="step-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M5 20h14"/></svg></span>
+        <span>Tap <strong>Install app</strong> (or <strong>Add to Home screen</strong>), then <strong>Install</strong>.</span></li>
+      <li><span class="step-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8 12l3 3 5-6"/></svg></span>
+        <span>Open <strong>Halo CE</strong> from your home screen or app drawer.</span></li>
+    </ol>
+    <p class="small">Samsung Internet: tap ☰, then <strong>Add page to</strong>, then <strong>Home screen</strong>.</p>
+    <button type="button" class="button primary" data-close>Got it</button>
+  </div>
+</section>
 <div id="touch" class="touch-layer" hidden></div>
 <div id="fps" class="fps" hidden></div>
 
 <main id="launcher">
   <section class="panel">
     <header>
-      <h1>Halo CE <span>Web</span></h1>
+      <h1 class="title">Halo CE <span>Web</span></h1>
       <p class="subtitle">The Halo: Combat Evolved decompilation, running in your browser.</p>
     </header>
 
@@ -30,14 +76,13 @@
     <p id="controller-status" class="hint controller-status"></p>
 
     <div id="install-hint" class="hint" hidden>
-      <strong>Install it:</strong> tap <span class="share-glyph" aria-hidden="true">⬆︎</span> Share, then
-      <em>Add to Home Screen</em>. The installed app runs full screen and keeps its data.
+      <strong>Install it</strong> for full screen play that keeps its data.
+      <button type="button" class="button small-button" id="install-hint-how">How</button>
     </div>
     <div id="install-android" class="hint" hidden>
-      <strong>Install it</strong> to play full screen and keep the game data:
+      <strong>Install it</strong> for full screen play that keeps its data.
       <button type="button" class="button small-button" id="install-button" hidden>Install app</button>
-      <span id="install-android-menu">open the browser's menu <span aria-hidden="true">⋮</span>, then <em>Install app</em>
-        (or <em>Add to Home screen</em>).</span>
+      <span id="install-android-menu"><button type="button" class="button small-button" id="install-android-how">How</button></span>
     </div>
 
     <div id="step-data" class="step">

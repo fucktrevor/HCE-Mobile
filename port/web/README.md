@@ -1,11 +1,18 @@
 # Web (iPhone, iPad, Android and desktop browsers)
 
 `ninja web` builds the game as WebAssembly, with a page that installs as a
-home-screen web app: `build/web/site`. On an iPhone or iPad, open the page in
-Safari, tap Share, then *Add to Home Screen*. On Android, open it in Chrome
-(or Edge, or Samsung Internet) and push *Install app* on the page, or choose
-*Install app* in the browser's menu. The installed app runs full screen and
-works offline.
+home-screen web app: `build/web/site`. The first visit to the site (not the
+installed app) welcomes the player with a button for each kind of phone:
+*Install on Android* asks the browser to install it (its install prompt), or
+shows where its menu does; *Install on iPhone / iPad* shows the steps (Share,
+then *Add to Home Screen*), which iOS lets only the person take. The
+installed app runs full screen and works offline.
+
+The start page is themed as a UNSC terminal, with Orbitron and Rajdhani
+(`site/fonts`, SIL Open Font License) over `site/art/sky.svg`, original art.
+It carries no Halo artwork: once the player's own game has run, a frame of
+its main menu (about 12 seconds in) becomes the start page's background,
+kept in the site's storage on that device only.
 
 The GitHub Actions workflow `.github/workflows/web.yml` builds the site for
 each commit and publishes the build of `main` on GitHub Pages (in the
