@@ -1,3 +1,22 @@
+# Halo CE Mobile
+
+**Play: https://fucktrevor.github.io/HCE-Mobile/** (iPhone, iPad, Android and desktop browsers)
+
+Halo CE Mobile is Halo: Combat Evolved as an installable web app: the game
+compiled to WebAssembly, with touch and controller input, online System Link
+play, and a game library for your own disc images. It is a fork of
+[cybersecurity/halo-ce-universal](https://github.com/cybersecurity/halo-ce-universal),
+the Linux, Windows and Android ports of the Halo CE decompilation by
+[punpckhdq/halo](https://github.com/punpckhdq/halo) and
+[bnunu/halo-1](https://github.com/bnunu/halo-1); all credit for the
+decompilation and those ports goes to them. The web port is in
+[port/web](port/web/README.md). An unofficial fan project, not affiliated with
+or endorsed by Microsoft; it includes no game data.
+
+The original project's README follows.
+
+---
+
 # Halo: Combat Evolved for Linux, Windows, Android and the web (iOS)
 
 This project is a port of the Halo: Combat Evolved decompilation to Linux,

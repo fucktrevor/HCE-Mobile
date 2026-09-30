@@ -954,3 +954,5 @@ body.playing { background: #000; }
 @media (orientation: landscape) and (max-height: 520px) {
   .welcome-legal { grid-column: 1 / span 2; margin-top: 10px; max-width: none; text-align: center; }
 }
+.legal.credits { margin-top: 14px; }
+.legal.credits strong { color: var(--text); }

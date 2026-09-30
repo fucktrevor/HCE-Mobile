@@ -1,5 +1,13 @@
 # Web (iPhone, iPad, Android and desktop browsers): Halo CE Mobile
 
+Halo CE Mobile is built on
+[cybersecurity/halo-ce-universal](https://github.com/cybersecurity/halo-ce-universal),
+the Linux, Windows and Android ports of the Halo: Combat Evolved
+decompilation, which starts from [bnunu/halo-1](https://github.com/bnunu/halo-1),
+a fork of [punpckhdq/halo](https://github.com/punpckhdq/halo). The web port
+(this folder) adds the WebAssembly build, the installable page, touch and
+controller input, online play over WebRTC, and the rest described here.
+
 `ninja web` builds the game as WebAssembly, with a page that installs as a
 home-screen web app: `build/web/site`. The first visit to the site (not the
 installed app) welcomes the player with a button for each kind of phone:
