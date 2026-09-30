@@ -628,6 +628,9 @@ symbols in this file:
 struct widget_instance;
 
 #include "cseries.h"
+#ifdef HALO_WEB
+#include <stdlib.h>
+#endif
 #include "errors.h"
 #include "bitmaps/bitmap_group.h"
 #include "bitmaps/bitmaps.h"
@@ -6007,6 +6010,11 @@ void render_ui_widgets(
 				/* the mouse drives the first player's menus */
 				ui_mouse_noting_targets = widget->local_player_index == NONE ||
 					widget->local_player_index == 0;
+#endif
+#ifdef HALO_WEB
+				/* HALO_WEB_HIDE_MENUS=1: the scene behind the menus alone, to
+				capture the start page's art from the player's own game */
+				if (!getenv("HALO_WEB_HIDE_MENUS"))
 #endif
 				widget_instance_render_recursive(
 					widget_globals.active_widgets[widget_index],

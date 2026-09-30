@@ -32,7 +32,7 @@ const SHELL = [
   'icons/icon-180.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
-  'art/sky.svg',
+  'art/ring.jpg',
   'fonts/orbitron-900.woff2',
   'fonts/rajdhani-500.woff2',
   'fonts/rajdhani-700.woff2',

@@ -741,8 +741,9 @@ can run the game, copies the game data out of the player's disc image
     // of the screen's own resolution.
     const long = Math.max(window.innerWidth, window.innerHeight);
     const short = Math.max(1, Math.min(window.innerWidth, window.innerHeight));
-    const height = 480;
-    const width = Math.min(Math.round(height * long / short), 1440);
+    // (captures of the start page's art draw more lines: window.__haloLines)
+    const height = window.__haloLines || 480;
+    const width = Math.min(Math.round(height * long / short), Math.max(1440, height * 3));
     return { width: width & ~1, height };
   }
 

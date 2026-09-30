@@ -98,6 +98,12 @@ static void screen_mode_choose(long *width, float scale[2])
 		*width = 1600;
 	*width &= ~1L;
 	scale[0] = scale[1] = 1.0f;
+#ifdef HALO_WEB
+	/* HALO_WEB_RENDER_SCALE: targets drawn at that many pixels a game pixel
+	(for captures of the start page's art; the page makes its canvas match) */
+	if (getenv("HALO_WEB_RENDER_SCALE") && atof(getenv("HALO_WEB_RENDER_SCALE")) > 1.0)
+		scale[0] = scale[1] = (float)atof(getenv("HALO_WEB_RENDER_SCALE"));
+#endif
 #else
 	long display_width, display_height;
 

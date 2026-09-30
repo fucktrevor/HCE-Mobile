@@ -9,10 +9,14 @@ then *Add to Home Screen*), which iOS lets only the person take. The
 installed app runs full screen and works offline.
 
 The start page is themed as a UNSC terminal, with Orbitron and Rajdhani
-(`site/fonts`, SIL Open Font License) over `site/art/sky.svg`, original art.
-It carries no Halo artwork: once the player's own game has run, a frame of
-its main menu (about 12 seconds in) becomes the start page's background,
-kept in the site's storage on that device only.
+(`site/fonts`, SIL Open Font License) over `site/art/ring.jpg`: the ring
+from the scene behind Halo's main menu, a frame of the game drawn with its
+menus hidden (`HALO_WEB_HIDE_MENUS=1`) at three times the pixels
+(`HALO_WEB_RENDER_SCALE=3`, with `window.__haloLines = 1440` on the page),
+used under Microsoft's Game Content Usage Rules, whose notice the page
+carries. Once the player's own game has run, a frame of its main menu
+(about 12 seconds in) becomes the start page's background, kept in the
+site's storage on that device only.
 
 The GitHub Actions workflow `.github/workflows/web.yml` builds the site for
 each commit and publishes the build of `main` on GitHub Pages (in the

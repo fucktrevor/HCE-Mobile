@@ -685,8 +685,9 @@ body:not(.playing) .layout-editor { background: radial-gradient(ellipse at 50% 4
 /* ---------- the theme: a UNSC terminal over a starfield
 
 Orbitron for titles and Rajdhani for labels and buttons (fonts/, SIL Open
-Font License). The backdrop is art/sky.svg (original: stars, a distant ring,
-a planet), or once the player's own game has run, a frame of its main menu
+Font License). The backdrop is art/ring.jpg, the ring of Halo's main menu
+(a frame of the game's own scene, used under Microsoft's Game Content Usage
+Rules), or once the player's own game has run, a frame of its main menu
 (app.js, captureBackdrop), kept on the device only. */
 
 @font-face {
@@ -725,7 +726,8 @@ html, body { background: var(--bg); }
   position: fixed;
   inset: -12px;
   z-index: -1;
-  background: url("art/sky.svg") center / cover no-repeat, var(--bg);
+  filter: brightness(0.6);
+  background: url("art/ring.jpg") 62% center / cover no-repeat, var(--bg);
 }
 body.has-backdrop .backdrop {
   background-size: cover;
@@ -845,7 +847,7 @@ h2::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg
   justify-content: center;
   padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
     max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
-  background: radial-gradient(ellipse at 50% 30%, rgba(4, 7, 12, 0.1), rgba(4, 7, 12, 0.75)), url("art/sky.svg") center / cover no-repeat, var(--bg);
+  background: radial-gradient(ellipse at 50% 45%, rgba(4, 7, 12, 0.35), rgba(4, 7, 12, 0.8)), url("art/ring.jpg") 62% center / cover no-repeat, var(--bg);
   overflow: auto;
 }
 body.has-backdrop .welcome { background: rgba(4, 7, 12, 0.72); }
@@ -947,3 +949,8 @@ body.has-backdrop .welcome { background: rgba(4, 7, 12, 0.72); }
 /* the page's body lets the backdrop (behind it) show; html keeps the colour */
 body { background: transparent; }
 body.playing { background: #000; }
+.legal a { color: var(--accent); }
+.welcome-legal { margin: 22px auto 0; max-width: 380px; font-size: 11px; line-height: 1.4; color: rgba(200, 212, 226, 0.55); }
+@media (orientation: landscape) and (max-height: 520px) {
+  .welcome-legal { grid-column: 1 / span 2; margin-top: 10px; max-width: none; text-align: center; }
+}
