@@ -1810,7 +1810,12 @@ void splitscreen_pregame_status_screen_update(
 						seconds_to_game_start - (hours * 60 + minutes) * 60);
 				}
 			}
+#ifdef HALO_WEB
+			else if (game->player_count < (network_game_is_splitscreen_local() ? 1 : 2) ||
+				game->variant.has_teams == TRUE)
+#else
 			else if (game->player_count < 2 || game->variant.has_teams == TRUE)
+#endif
 			{
 				status_text->visible = FALSE;
 				countdown_text->visible = FALSE;
@@ -2927,7 +2932,12 @@ void multiplayer_game_directions(
 
 		if (network_game_is_splitscreen_local() &&
 			game &&
+#ifdef HALO_WEB
+			/* (the web port starts a split screen game with one player) */
+			game->player_count < 1)
+#else
 			game->player_count < 2)
+#endif
 		{
 			widget->parameters.text_box.string_list_index =
 				_multiplayer_game_text_string_waiting_for_player;

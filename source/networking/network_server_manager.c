@@ -2149,6 +2149,14 @@ boolean server_needs_more_teams(
 			}
 		}
 
+#ifdef HALO_WEB
+		/* one player alone in a split screen team game: no other team needed */
+		if (network_game_is_splitscreen_local() &&
+			player_count_by_team[0] + player_count_by_team[1] == 1)
+		{
+			return FALSE;
+		}
+#endif
 		for (team_index = 0;
 			team_index < NUMBER_OF_MULTIPLAYER_TEAMS;
 			team_index++)
@@ -2230,13 +2238,26 @@ boolean server_has_enough_machines(
 	return has_enough_machines;
 }
 
+#ifdef HALO_WEB
+/* the web port: one player can start a split screen game alone (to play a
+multiplayer map by themselves, or for remote co-op); system link still waits
+for a second machine */
+static long server_minimum_players(
+	struct network_game_server *server)
+{
+	return network_game_is_splitscreen_local() ? 1 : server->game.minimum_players;
+}
+#else
+#define server_minimum_players(server) ((server)->game.minimum_players)
+#endif
+
 boolean server_ok_to_countdown(
 	struct network_game_server *server)
 {
 	if (server_has_enough_machines(server) &&
 		server_has_a_player_on_each_machine(server) &&
 		!server_needs_more_teams(server) &&
-		server->game.player_count >= server->game.minimum_players)
+		server->game.player_count >= server_minimum_players(server))
 	{
 		return TRUE;
 	}
@@ -2420,7 +2441,7 @@ boolean network_game_server_game_can_start(
 	match_assert(NETWORK_SERVER_MANAGER_FILE, 0x782, server);
 
 	return server->state == 0 &&
-		server->game.player_count >= server->game.minimum_players;
+		server->game.player_count >= server_minimum_players(server);
 }
 
 void network_game_server_pause_countdown(

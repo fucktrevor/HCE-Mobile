@@ -229,6 +229,15 @@ running speed, and big heads scale each biped's head node and those below
 it. Playing another character swaps the player's unit for a new one of that
 biped, as the game's own "bump possession" cheat does.
 
+## Multiplayer maps alone
+
+A split screen game starts with one player: Multiplayer > Split Screen, pick
+a profile, a map and a game type, and start it to play or explore a
+multiplayer map alone (the original game waits for a second player; in
+`networking/network_server_manager.c` and the pregame screen's text, under
+`HALO_WEB`). A system link game still waits for a second machine, so that
+the others in a room have time to join.
+
 ## Remote co-op
 
 A friend in the room can play the host's game as its second player from
