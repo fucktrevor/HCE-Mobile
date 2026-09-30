@@ -309,7 +309,7 @@ const HaloInput = (() => {
     swap: '<path d="M4 8h14M14 4l4 4-4 4"/><path d="M20 16H6M10 12l-4 4 4 4"/>',
     light: '<path d="M4 9h7l5-4v14l-5-4H4z"/><path d="M19 8l2-1M19 12h3M19 16l2 1"/>',
     pause: '<path d="M9 5v14M15 5v14"/>',
-    score: '<path d="M5 6h14M5 12h14M5 18h14"/>',
+    score: '<path d="M4 20v-7h5v7M9.5 20V5h5v15M15 20v-4h5v4"/>',
   };
 
   function icon(name) {
