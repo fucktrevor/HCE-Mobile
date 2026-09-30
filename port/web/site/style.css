@@ -870,7 +870,7 @@ body.has-backdrop .welcome { background: rgba(4, 7, 12, 0.72); }
   color: var(--accent);
 }
 .welcome .title { font-size: clamp(36px, min(11vw, 13vh), 72px); line-height: 1.05; }
-.welcome .title span { display: block; margin: 0.35em 0 0; font-size: 0.34em; letter-spacing: 1.2em; vertical-align: 0; }
+.welcome .title span { display: block; margin: 0.35em -1em 0 0; font-size: 0.34em; letter-spacing: 1em; vertical-align: 0; }
 .tagline { margin: 18px auto 26px; max-width: 340px; color: #c6d3e2; font-size: 16px; }
 
 .install-buttons { display: flex; flex-direction: column; gap: 12px; }

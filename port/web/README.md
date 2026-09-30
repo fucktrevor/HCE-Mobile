@@ -1,4 +1,4 @@
-# Web (iPhone, iPad, Android and desktop browsers)
+# Web (iPhone, iPad, Android and desktop browsers): Halo CE Mobile
 
 `ninja web` builds the game as WebAssembly, with a page that installs as a
 home-screen web app: `build/web/site`. The first visit to the site (not the

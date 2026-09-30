@@ -1,5 +1,5 @@
 {
-  "name": "Halo CE Web",
+  "name": "Halo CE Mobile",
   "short_name": "Halo CE",
   "description": "The Halo: Combat Evolved decompilation in the browser. Needs your own Xbox disc image.",
   "start_url": "./",
