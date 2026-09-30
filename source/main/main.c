@@ -2992,6 +2992,12 @@ void main_loop_of_death(
 	return;
 }
 
+#ifdef HALO_WEB
+/* port/web/src/web_sdl.c: remote co-op (port/web/site/coop.js) */
+int web_coop_full_views(void);
+void web_present_remote_view(int remote);
+#endif
+
 void main_game_render(
 	double time_delta_since_tick_sec)
 {
@@ -3060,6 +3066,64 @@ void main_game_render(
 		set_window_camera_values(window, observer);
 		window->console_window = FALSE;
 	}
+
+#ifdef HALO_WEB
+	/* remote co-op: while the second player watches from their own device,
+	each of the two players' views takes the whole screen, in a frame of its
+	own: the second player's first, for their device, then this screen's */
+	if (player_window_count == 2 && global_screenshot_count.count <= 0 && web_coop_full_views())
+	{
+		struct render_window views[2];
+		short view_index;
+
+		views[0] = global_screenshot_count.windows[0];
+		views[1] = global_screenshot_count.windows[1];
+		for (view_index = 1; view_index >= 0; view_index--)
+		{
+			struct render_window *view = &global_screenshot_count.windows[0];
+			struct render_window *console = &global_screenshot_count.windows[1];
+
+			*view = views[view_index];
+			compute_window_bounds(
+				0,
+				1,
+				&view->rasterizer_camera.viewport_bounds,
+				&view->rasterizer_camera.window_bounds);
+			observer = view->local_player_index != NONE ? observer_get_camera(view->local_player_index) : NULL;
+#ifdef HALO_LINUX
+			if (view->local_player_index != NONE)
+				observer = render_interpolation_camera(view->local_player_index, observer);
+#endif
+			set_window_camera_values(view, observer);
+			compute_window_bounds(
+				0,
+				1,
+				&console->rasterizer_camera.viewport_bounds,
+				&console->rasterizer_camera.window_bounds);
+			console->local_player_index = NONE;
+			console->console_window = TRUE;
+			set_window_camera_values(console, NULL);
+			render_frame(
+				global_screenshot_count.windows,
+				2,
+				NULL,
+				NULL,
+				main_globals.movie,
+				(real)time_delta_since_tick_sec);
+			/* the second player's frame goes to their device now; this
+			screen's is presented as every frame is */
+			if (view_index == 1)
+			{
+				web_present_remote_view(TRUE);
+				render_frame_present(NULL, NULL);
+				web_present_remote_view(FALSE);
+			}
+		}
+		collision_log_end_period();
+		unlock_global_random_seed();
+		return;
+	}
+#endif
 
 	window = &global_screenshot_count.windows[player_window_count];
 	compute_window_bounds(

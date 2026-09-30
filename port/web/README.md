@@ -246,9 +246,12 @@ The friend's device runs no game and needs no game data.
   Aiming by dragging or with a mouse goes as motion, which the game adds to
   that player's aim as it does the host's mouse.
 - The host's page streams the friend's view back as WebRTC video, with the
-  game's sound: the lower half of the screen while the game shows two
-  views (the game says how many, `split_views`), all of it in the menus.
-  The friend can pick another part.
+  game's sound. While the friend watches, the game does not split the
+  screen: it draws each player's view on a whole screen of its own, in the
+  screen's shape, as on each player's own console (`main_game_render` in
+  `main/main.c`, under `HALO_WEB`): first the friend's, which goes to their
+  device (`haloPresentView`), then the host's, which the host sees. The
+  friend can watch the host's screen instead.
 - Their connection is signalled over the room's encrypted topic, apart from
   the room's own connections (`site/coop.js`).
 

@@ -767,12 +767,12 @@ can run the game, copies the game data out of the player's disc image
 
   function readOffsets(module) {
     const pointer = module._web_shared_offsets();
-    const words = new Int32Array(state.memory.buffer, pointer, 36);
+    const words = new Int32Array(state.memory.buffer, pointer, 37);
     const names = ['size', 'eventWrite', 'eventRead', 'events', 'eventSize', 'gamepads', 'gamepadSize',
       'displayWidth', 'displayHeight', 'frameCounter', 'framesPresented', 'vsync', 'audioRate', 'audioOpen',
       'audioWrite', 'audioRead', 'audioUnderruns', 'audioRing', 'audioRingFrames', 'pageHidden', 'gameStarted',
       'eventCapacity', 'gamepadCount', 'netLocalAddress', 'netOutWrite', 'netOutRead', 'netInWrite', 'netInRead',
-      'netOut', 'netOutBytes', 'netIn', 'netInBytes', 'customRules', 'customCharacter', 'customCharacterStatus', 'splitViews'];
+      'netOut', 'netOutBytes', 'netIn', 'netInBytes', 'customRules', 'customCharacter', 'customCharacterStatus', 'splitViews', 'coopFullViews'];
     const offsets = {};
     names.forEach((name, index) => { offsets[name] = words[index]; });
     return offsets;
@@ -788,6 +788,8 @@ can run the game, copies the game data out of the player's disc image
 
   function animationFrame() {
     const i32 = new Int32Array(state.memory.buffer);
+    // remote co-op: each player's view on a whole screen while one watches
+    i32[sharedWord('coopFullViews')] = HaloCoop.fullViews() ? 1 : 0;
     Atomics.add(i32, sharedWord('frameCounter'), 1);
     Atomics.notify(i32, sharedWord('frameCounter'));
     HaloInput.pollGamepads();
@@ -988,6 +990,8 @@ can run the game, copies the game data out of the player's disc image
         context.transferFromImageBitmap(bitmap);
         state.presented = (state.presented || 0) + 1;
       },
+      // remote co-op: the second player's own view, for their device
+      haloPresentView: (bitmap) => HaloCoop.viewFrame(bitmap),
       haloMessage: (kind, text) => {
         if (kind === 0) log('game: ' + text);
         else if (kind === 1) toast(text, 5000);

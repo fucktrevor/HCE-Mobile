@@ -46,6 +46,7 @@ const HaloCoop = (() => {
     audio: null,          // () => { context, node } of the game's sound
     splitViews: () => 0,  // the game's views on the screen (web_shared.h split_views)
     lastFrame: 0,
+    lastViewFrame: 0,     // when the game last drew the second player's own view
   };
 
   function hostStatus() {
@@ -185,20 +186,25 @@ const HaloCoop = (() => {
     if (track && track.requestFrame) track.requestFrame();
   }
 
-  // each frame the game presents, before it goes onto the page's canvas
-  function frame(bitmap) {
+  // Whether the game should draw the second player's view on a whole screen
+  // of its own (web_shared.h coop_full_views): as it would on their console,
+  // the shape of the screen, rather than half of the host's split screen
+  function fullViews() {
+    return !!(host.guest && host.guest.connected && host.guest.view === 'auto');
+  }
+
+  // a frame of the second player's own view (Module.haloPresentView)
+  function viewFrame(bitmap) {
     const guest = host.guest;
-    if (!guest || !guest.connected) return;
-    const now = performance.now();
-    if (now - host.lastFrame < 15) return; // 60 a second at most
-    host.lastFrame = now;
-    const views = host.splitViews();
-    let part = guest.view;
-    if (part === 'auto') part = views >= 2 ? 'bottom' : 'whole';
+    if (guest && guest.connected) {
+      host.lastViewFrame = performance.now();
+      draw(bitmap, 0, bitmap.height);
+    }
+    bitmap.close();
+  }
+
+  function draw(bitmap, sy, sh) {
     const width = bitmap.width;
-    const height = bitmap.height;
-    const sy = part === 'bottom' ? Math.floor(height / 2) : 0;
-    const sh = part === 'whole' ? height : Math.floor(height / 2);
     const canvas = streamCanvas();
     const targetWidth = Math.min(STREAM_WIDTH, width);
     const targetHeight = Math.max(2, Math.round(targetWidth * sh / width) & ~1);
@@ -209,7 +215,25 @@ const HaloCoop = (() => {
     host.context.drawImage(bitmap, 0, sy, width, sh, 0, 0, targetWidth, targetHeight);
     requestFrame();
     const rumble = HaloInput.remoteRumble();
-    if (rumble && guest.control.readyState === 'open') guest.control.send(JSON.stringify({ rumble }));
+    if (rumble && host.guest.control.readyState === 'open') host.guest.control.send(JSON.stringify({ rumble }));
+  }
+
+  // each frame the game presents, before it goes onto the page's canvas
+  function frame(bitmap) {
+    const guest = host.guest;
+    if (!guest || !guest.connected) return;
+    const now = performance.now();
+    // (the game draws the second player's own view: this frame is the host's)
+    if (fullViews() && now - host.lastViewFrame < 250) return;
+    if (now - host.lastFrame < 15) return; // 60 a second at most
+    host.lastFrame = now;
+    const views = host.splitViews();
+    let part = guest.view;
+    if (part === 'auto') part = views >= 2 ? 'bottom' : 'whole';
+    const height = bitmap.height;
+    const sy = part === 'bottom' ? Math.floor(height / 2) : 0;
+    const sh = part === 'whole' ? height : Math.floor(height / 2);
+    draw(bitmap, sy, sh);
   }
 
   // ---------- the friend (the second player)
@@ -391,6 +415,6 @@ const HaloCoop = (() => {
     if (options.splitViews) host.splitViews = options.splitViews;
   }
 
-  return { setHosting, frame, join, leave, setView, on, configure, hostStatus,
+  return { setHosting, frame, viewFrame, fullViews, join, leave, setView, on, configure, hostStatus,
     get hosting() { return host.enabled; }, get streaming() { return !!(host.guest && host.guest.connected); } };
 })();

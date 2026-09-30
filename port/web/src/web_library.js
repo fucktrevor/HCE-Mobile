@@ -122,6 +122,16 @@ addToLibrary({
     webHalo.post('haloPresent', [bitmap], [bitmap]);
   },
 
+  // remote co-op: a frame of the second player's own view, which goes to
+  // their device instead of onto the page (Module.haloPresentView)
+  web_js_gl_present_view__deps: ['$webHalo'],
+  web_js_gl_present_view: () => {
+    var canvas = webHalo.canvas;
+    if (!canvas) return;
+    var bitmap = canvas.transferToImageBitmap();
+    webHalo.post('haloPresentView', [bitmap], [bitmap]);
+  },
+
   // kind: 0 status, 1 notice, 2 clipboard text, 3 fatal error, 6 frame timing, 7 WebGL calls
   web_js_post__deps: ['$webHalo'],
   web_js_post: (kind, text) => {

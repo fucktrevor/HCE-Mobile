@@ -1304,6 +1304,11 @@ void render_debug_profile(
 	return;
 }
 
+#ifdef HALO_WEB
+/* port/web/src/web_sdl.c */
+int web_coop_full_views(void);
+#endif
+
 void interface_splitscreen_render(
 	void)
 {
@@ -1312,6 +1317,11 @@ void interface_splitscreen_render(
 
 	if (game_engine_force_single_screen() || cinematic_in_progress())
 		return;
+#ifdef HALO_WEB
+	/* remote co-op: each player's view has the whole screen */
+	if (web_coop_full_views())
+		return;
+#endif
 
 	window_count = local_player_count();
 

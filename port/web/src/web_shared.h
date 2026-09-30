@@ -125,7 +125,12 @@ struct web_shared_state
 	/* the game's state for the page: the views on the screen (the local
 	players of a split screen game, 0 in the menus), for remote co-op */
 	volatile int32_t split_views;
-	volatile int32_t reserved[12];
+	/* the page's state for the game: nonzero while a remote co-op player
+	watches, so that the game draws each player's view on the whole screen,
+	one frame for this screen and one for theirs (port/linux/game/
+	custom_content.c) */
+	volatile int32_t coop_full_views;
+	volatile int32_t reserved[11];
 
 	/* online play (web_net.c, port/web/site/net.js): this machine's address
 	on the players' network (network byte order, from the page), and the

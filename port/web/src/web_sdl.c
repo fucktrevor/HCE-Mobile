@@ -32,6 +32,7 @@ frame goes to the page as an ImageBitmap.
 int web_js_gl_create(int width, int height, int statistics);
 void web_js_gl_resize(int width, int height);
 void web_js_gl_present(void);
+void web_js_gl_present_view(void);
 void web_js_post(int kind, const char *text);
 
 /* ---------- the shared state */
@@ -83,6 +84,7 @@ enum
 	WEB_OFFSET_CUSTOM_CHARACTER,
 	WEB_OFFSET_CUSTOM_CHARACTER_STATUS,
 	WEB_OFFSET_SPLIT_VIEWS,
+	WEB_OFFSET_COOP_FULL_VIEWS,
 	NUMBER_OF_WEB_OFFSETS
 };
 
@@ -127,6 +129,7 @@ EMSCRIPTEN_KEEPALIVE const int *web_shared_offsets(void)
 	offsets[WEB_OFFSET_CUSTOM_CHARACTER] = OFFSET(custom_character);
 	offsets[WEB_OFFSET_CUSTOM_CHARACTER_STATUS] = OFFSET(custom_character_status);
 	offsets[WEB_OFFSET_SPLIT_VIEWS] = OFFSET(split_views);
+	offsets[WEB_OFFSET_COOP_FULL_VIEWS] = OFFSET(coop_full_views);
 #undef OFFSET
 	return offsets;
 }
@@ -341,6 +344,20 @@ static void frame_timing(double presenting, double presented, double waited)
 	}
 }
 
+/* remote co-op: the next swap is the second player's own view, for their
+device (port/linux/game/custom_content.c) */
+static int present_remote_view;
+
+void web_present_remote_view(int remote)
+{
+	present_remote_view = remote;
+}
+
+int web_coop_full_views(void)
+{
+	return __atomic_load_n(&shared_state.coop_full_views, __ATOMIC_RELAXED) != 0;
+}
+
 bool SDL_GL_SwapWindow(SDL_Window *window)
 {
 	int width, height;
@@ -348,6 +365,13 @@ bool SDL_GL_SwapWindow(SDL_Window *window)
 	(void)window;
 	if (!gl_context)
 		return false;
+	if (present_remote_view)
+	{
+		/* not this screen's frame: no waiting for the display, the game's
+		own frame follows */
+		web_js_gl_present_view();
+		return true;
+	}
 	double presenting = emscripten_get_now(), presented;
 
 	web_js_gl_present();

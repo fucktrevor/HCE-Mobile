@@ -479,7 +479,8 @@ void custom_content_update(
 		update_character();
 
 	/* for remote co-op: which part of the screen is the second player's */
-	web_custom_set_split_views(game_in_progress() && !main_menu_is_active() ? local_player_count() : 0);
+	web_custom_set_split_views(!game_in_progress() || main_menu_is_active() ? 0 :
+		cinematic_in_progress() || game_engine_force_single_screen() ? 1 : local_player_count());
 
 	if (web_custom_debug())
 	{
