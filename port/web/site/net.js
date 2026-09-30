@@ -35,6 +35,7 @@ const HaloNet = (() => {
   const PEER_TIMEOUT = 20000;
   const PACKET_HEADER = 24;
   const KIND = { DATAGRAM: 1, OPEN: 2, DATA: 3, CLOSE: 4, REFUSE: 5 };
+  const CHAT_LENGTH = 200;
 
   const state = {
     shared: null,        // { memory, base, offsets }
@@ -51,6 +52,8 @@ const HaloNet = (() => {
     iceServers: STUN,
     pumpTimer: null,
     helloTimer: null,
+    chatHeard: new Map(), // id -> when its last chat message came
+    chatSent: 0,
   };
 
   function randomId() {
@@ -339,6 +342,15 @@ const HaloNet = (() => {
     } else if (message.type === 'bye') {
       const peer = state.peers.get(message.from);
       if (peer) dropPeer(peer);
+    } else if (message.type === 'chat') {
+      // text chat: shown as text, cut to length, a few a second at most
+      const text = String(message.text || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, CHAT_LENGTH);
+      if (!text) return;
+      const now = Date.now();
+      const last = state.chatHeard.get(message.from) || 0;
+      if (now - last < 250) return;
+      state.chatHeard.set(message.from, now);
+      emit('chat', { name: String(message.name || 'Player').slice(0, 24), text, self: false, time: now });
     }
   }
 
@@ -495,6 +507,18 @@ const HaloNet = (() => {
     emit('status', status());
   }
 
+  // Text chat, to everyone in the room, over the room's (encrypted) topic
+  async function sendChat(text) {
+    text = String(text || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, CHAT_LENGTH);
+    if (!text || !state.room) return false;
+    const now = Date.now();
+    if (now - state.chatSent < 400) return false;
+    state.chatSent = now;
+    await publish({ type: 'chat', text, name: playerName() });
+    emit('chat', { name: playerName(), text, self: true, time: now });
+    return true;
+  }
+
   function newRoomCode() {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const bytes = crypto.getRandomValues(new Uint8Array(6));
@@ -507,5 +531,6 @@ const HaloNet = (() => {
 
   state.address = localAddress();
 
-  return { attach, join, leave, newRoomCode, on, status, addressText, get address() { return state.address; } };
+  return { attach, join, leave, newRoomCode, on, status, addressText, sendChat, CHAT_LENGTH,
+    get address() { return state.address; } };
 })();

@@ -125,7 +125,8 @@
       <div id="online-room" hidden>
         <p class="room-line">Room <strong id="online-code"></strong>
           <button type="button" class="button small-button" id="online-share">Share link</button>
-          <button type="button" class="button small-button" id="online-leave">Leave</button></p>
+          <button type="button" class="button small-button" id="online-leave">Leave</button>
+          <button type="button" class="button small-button" id="online-chat">Chat</button></p>
         <p class="small" id="online-status"></p>
         <p class="small" id="online-names"></p>
         <p class="hint" id="online-role" hidden></p>
@@ -184,7 +185,21 @@
 
 <button type="button" id="menu-button" class="menu-button" aria-label="Menu" hidden>
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  <span id="chat-unread" class="unread" hidden></span>
 </button>
+<div id="chat-feed" class="chat-feed" aria-live="polite"></div>
+<div id="chat" class="chat" hidden role="dialog" aria-label="Chat">
+  <div class="chat-head">
+    <strong>Chat</strong> <span id="chat-room" class="small"></span>
+    <button type="button" class="button small-button" id="chat-close">Close</button>
+  </div>
+  <div id="chat-log" class="chat-log"></div>
+  <div class="chat-quick" id="chat-quick"></div>
+  <form id="chat-form" class="chat-form" autocomplete="off">
+    <input id="chat-input" type="text" maxlength="200" placeholder="Message the room" enterkeyhint="send">
+    <button type="submit" class="button primary small-button">Send</button>
+  </form>
+</div>
 <div id="game-menu" class="overlay game-menu" hidden>
   <div class="panel">
     <h2>Menu</h2>
@@ -195,6 +210,7 @@
         <option value="xbox">Original Xbox controller</option>
       </select>
       <button type="button" class="button small-button" id="menu-edit-layout">Edit layout</button></label>
+    <div class="row buttons"><button type="button" class="button" id="menu-chat">Chat</button></div>
     <label class="row"><input type="checkbox" id="menu-silent"> Sound when the phone is on silent</label>
     <label class="row"><input type="checkbox" id="menu-fps"> Show the frame rate</label>
     <label class="row" id="menu-game-row">Game

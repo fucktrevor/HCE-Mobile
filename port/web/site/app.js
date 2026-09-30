@@ -939,7 +939,8 @@ can run the game, copies the game data out of the player's disc image
     // the controller's B does, instead of leaving the game
     history.pushState({ playing: true }, '');
     window.addEventListener('popstate', () => {
-      if (!$('game-menu').hidden) closeGameMenu();
+      if (!$('chat').hidden) closeChat();
+      else if (!$('game-menu').hidden) closeGameMenu();
       else if ($('layout-editor').hidden) HaloInput.pressBack();
       history.pushState({ playing: true }, '');
     });
@@ -1074,6 +1075,111 @@ can run the game, copies the game data out of the player's disc image
     } catch (error) {
       toast(error.message);
       return null;
+    }
+  }
+
+  // ---------- text chat: to everyone in the room (net.js sendChat), in a
+  // panel opened from the in-game menu or the room, with new messages shown
+  // over the game for a few seconds
+
+  const QUICK_CHAT = ['GG', 'Nice shot!', 'Need backup', 'On my way', 'Ready?', 'One more?'];
+  const chat = { messages: [], unread: 0 };
+
+  function chatLine(message) {
+    const line = document.createElement('div');
+    line.className = 'chat-line' + (message.self ? ' self' : '');
+    const who = document.createElement('b');
+    who.textContent = message.self ? 'You' : message.name;
+    line.append(who, document.createTextNode(message.text));
+    return line;
+  }
+
+  function renderChatLog() {
+    const log = $('chat-log');
+    log.textContent = '';
+    if (!chat.messages.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = HaloNet.status().room ? 'No messages yet. Say hi!' : 'Join a room (Play online) to chat with its players.';
+      log.appendChild(empty);
+    }
+    for (const message of chat.messages) log.appendChild(chatLine(message));
+    log.scrollTop = log.scrollHeight;
+    const status = HaloNet.status();
+    $('chat-room').textContent = status.room ? `Room ${status.room} · ${status.players + 1} in the room` : 'Not in a room';
+  }
+
+  function showUnread() {
+    const badge = $('chat-unread');
+    badge.hidden = chat.unread === 0;
+    badge.textContent = chat.unread > 9 ? '9+' : String(chat.unread);
+    $('online-chat').textContent = chat.unread ? `Chat (${chat.unread})` : 'Chat';
+  }
+
+  function feedLine(message) {
+    const feed = $('chat-feed');
+    const line = chatLine(message);
+    feed.appendChild(line);
+    while (feed.children.length > 4) feed.firstChild.remove();
+    setTimeout(() => line.classList.add('fading'), 6000);
+    setTimeout(() => line.remove(), 6800);
+  }
+
+  function onChat(message) {
+    chat.messages.push(message);
+    if (chat.messages.length > 100) chat.messages.shift();
+    if (!$('chat').hidden) {
+      renderChatLog();
+      return;
+    }
+    if (!message.self) {
+      chat.unread++;
+      showUnread();
+      if (state.started) feedLine(message);
+      else toast(`${message.name}: ${message.text}`, 4000);
+    }
+  }
+
+  function openChat() {
+    $('chat').hidden = false;
+    chat.unread = 0;
+    showUnread();
+    renderChatLog();
+    // (a touch screen's keyboard opens only when the field is tapped)
+    if (!matchMedia('(pointer: coarse)').matches) $('chat-input').focus();
+  }
+
+  function closeChat() {
+    $('chat').hidden = true;
+    $('chat-input').blur();
+  }
+
+  async function sendChat(text) {
+    if (!HaloNet.status().room) {
+      toast('Join a room (Play online) to chat.');
+      return false;
+    }
+    return HaloNet.sendChat(text);
+  }
+
+  function setUpChat() {
+    HaloNet.on((type, detail) => { if (type === 'chat') onChat(detail); });
+    $('chat-close').onclick = closeChat;
+    $('online-chat').onclick = openChat;
+    $('menu-chat').onclick = () => { closeGameMenu(); openChat(); };
+    $('chat-form').onsubmit = async (event) => {
+      event.preventDefault();
+      const input = $('chat-input');
+      if (await sendChat(input.value)) input.value = '';
+    };
+    const quick = $('chat-quick');
+    for (const text of QUICK_CHAT) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'button';
+      button.textContent = text;
+      button.onclick = () => sendChat(text);
+      quick.appendChild(button);
     }
   }
 
@@ -1397,6 +1503,7 @@ can run the game, copies the game data out of the player's disc image
     }
     await refreshGames();
     setUpLobby().catch((error) => log('lobby: ' + error));
+    setUpChat();
     checkForUpdate();
   }
 

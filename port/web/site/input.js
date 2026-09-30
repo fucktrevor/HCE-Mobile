@@ -101,6 +101,9 @@ const HaloInput = (() => {
 
   function onKey(event, down) {
     if (!shared) return;
+    // typing in the page's own fields (the chat) is not for the game
+    const target = event.target;
+    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
     const scancode = SCANCODES[event.code];
     if (scancode === undefined) return;
     // keep the browser's shortcuts (reload, developer tools) with Ctrl/Cmd
