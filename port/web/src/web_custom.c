@@ -42,6 +42,18 @@ void web_custom_message(const char *text)
 	web_js_post(1, text);
 }
 
+/* captures: --HALO_WEB_GAME_SPEED=0.25 runs games at a quarter of their
+speed, for recordings on slow machines that are sped up afterwards
+(thousandths; 0 when not set) */
+long web_custom_game_speed(void)
+{
+	static long speed = -1;
+
+	if (speed < 0)
+		speed = getenv("HALO_WEB_GAME_SPEED") ? (long)(atof(getenv("HALO_WEB_GAME_SPEED")) * 1000.0) : 0;
+	return speed;
+}
+
 /* tests: --HALO_CUSTOM_DEBUG=1 logs what the rules do; 2 also lets a
 character be played in a (split screen) multiplayer game */
 long web_custom_debug(void)

@@ -53,6 +53,7 @@ void web_custom_set_character_status(long status);
 void web_custom_message(char const *text);
 void web_custom_set_split_views(long views);
 long web_custom_debug(void);
+long web_custom_game_speed(void);
 void platform_log(char const *format, ...);
 
 /* the bits and characters of web_shared.h */
@@ -477,6 +478,13 @@ void custom_content_update(
 
 	if (game_in_progress())
 		update_character();
+
+	/* captures: a slower game, sped up afterwards */
+	if (web_custom_game_speed() > 0 && game_in_progress() && game_engine_running() &&
+		game_time_get_speed() != web_custom_game_speed() / 1000.0f)
+	{
+		game_time_set_speed(web_custom_game_speed() / 1000.0f);
+	}
 
 	/* for remote co-op: which part of the screen is the second player's */
 	web_custom_set_split_views(!game_in_progress() || main_menu_is_active() ? 0 :
