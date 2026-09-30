@@ -54,6 +54,12 @@ long web_custom_game_speed(void)
 	return speed;
 }
 
+/* tests and captures: --HALO_WEB_ALL_LEVELS=1 offers every campaign level */
+long web_custom_all_levels(void)
+{
+	return getenv("HALO_WEB_ALL_LEVELS") != NULL;
+}
+
 /* tests: --HALO_CUSTOM_DEBUG=1 logs what the rules do; 2 also lets a
 character be played in a (split screen) multiplayer game */
 long web_custom_debug(void)

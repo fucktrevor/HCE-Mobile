@@ -921,6 +921,10 @@ boolean game_state_test_persistent_storage(char *map_name, short *difficulty, bo
 struct widget_instance *ui_widget_load_by_name_or_tag(char const *name, long tag_index, struct widget_instance *parent, short local_player_index, long invoking_widget_tag, long focused_child_parent_widget_tag, short focused_child_index);
 #endif
 
+
+#ifdef HALO_WEB
+long web_custom_all_levels(void);
+#endif
 /* ---------- constants */
 
 /* ---------- macros */
@@ -5910,7 +5914,12 @@ static boolean solo_level_initialize_list_single_player(
 
 		((struct single_player_level_entry *)single_player_level_data)[level_index].map_name =
 			(&event_handler_functions.map_name)[level_index];
-		if (profile.single_player_map_flags[level_index] || level_index == highest_level + 1 || level_index == 0)
+		if (profile.single_player_map_flags[level_index] || level_index == highest_level + 1 || level_index == 0
+#ifdef HALO_WEB
+			/* tests and captures: --HALO_WEB_ALL_LEVELS=1 (port/web/src/web_custom.c) */
+			|| web_custom_all_levels()
+#endif
+			)
 		{
 			level_flags = (char)profile.single_player_map_flags[level_index];
 			((struct single_player_level_entry *)single_player_level_data)[level_index].unknown5 = (level_flags >> 1) & 1;

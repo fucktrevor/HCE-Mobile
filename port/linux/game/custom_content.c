@@ -480,7 +480,7 @@ void custom_content_update(
 		update_character();
 
 	/* captures: a slower game, sped up afterwards */
-	if (web_custom_game_speed() > 0 && game_in_progress() && game_engine_running() &&
+	if (web_custom_game_speed() > 0 && game_in_progress() && !main_menu_is_active() &&
 		game_time_get_speed() != web_custom_game_speed() / 1000.0f)
 	{
 		game_time_set_speed(web_custom_game_speed() / 1000.0f);
