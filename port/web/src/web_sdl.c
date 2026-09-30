@@ -82,6 +82,7 @@ enum
 	WEB_OFFSET_CUSTOM_RULES,
 	WEB_OFFSET_CUSTOM_CHARACTER,
 	WEB_OFFSET_CUSTOM_CHARACTER_STATUS,
+	WEB_OFFSET_SPLIT_VIEWS,
 	NUMBER_OF_WEB_OFFSETS
 };
 
@@ -125,6 +126,7 @@ EMSCRIPTEN_KEEPALIVE const int *web_shared_offsets(void)
 	offsets[WEB_OFFSET_CUSTOM_RULES] = OFFSET(custom_rules);
 	offsets[WEB_OFFSET_CUSTOM_CHARACTER] = OFFSET(custom_character);
 	offsets[WEB_OFFSET_CUSTOM_CHARACTER_STATUS] = OFFSET(custom_character_status);
+	offsets[WEB_OFFSET_SPLIT_VIEWS] = OFFSET(split_views);
 #undef OFFSET
 	return offsets;
 }
@@ -545,6 +547,30 @@ bool SDL_GetGamepadButton(SDL_Gamepad *gamepad, SDL_GamepadButton button)
 	if (__atomic_fetch_and(&pad->pressed, ~(1u << button), __ATOMIC_SEQ_CST) & (1u << button))
 		return true;
 	return (pad->buttons & (1u << button)) != 0;
+}
+
+/* remote co-op (port/linux/src/xinput_sdl.c): the aiming motion another
+device sent for this controller since the last call, in pixels */
+int web_gamepad_look(SDL_Gamepad *gamepad, float *x, float *y)
+{
+	struct web_gamepad *pad = gamepad_slot(gamepad);
+	int32_t look_x, look_y;
+
+	*x = *y = 0.0f;
+	if (!pad || !pad->connected)
+		return 0;
+	look_x = __atomic_exchange_n(&pad->look_x, 0, __ATOMIC_SEQ_CST);
+	look_y = __atomic_exchange_n(&pad->look_y, 0, __ATOMIC_SEQ_CST);
+	*x = look_x / 16.0f;
+	*y = look_y / 16.0f;
+	return look_x != 0 || look_y != 0;
+}
+
+int web_gamepad_is_remote(SDL_Gamepad *gamepad)
+{
+	struct web_gamepad *pad = gamepad_slot(gamepad);
+
+	return pad && pad == &shared_state.gamepads[WEB_REMOTE_GAMEPAD_SLOT];
 }
 
 SDL_GamepadType SDL_GetGamepadType(SDL_Gamepad *gamepad)

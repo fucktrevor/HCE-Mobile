@@ -229,6 +229,29 @@ running speed, and big heads scale each biped's head node and those below
 it. Playing another character swaps the player's unit for a new one of that
 biped, as the game's own "bump possession" cheat does.
 
+## Remote co-op
+
+A friend in the room can play the host's game as its second player from
+their own device, as on one console with two controllers: the campaign's
+co-op (Multiplayer > Cooperative Play, with the full game) or a split screen
+multiplayer game. The host turns on *Host co-op* in the room (or in the
+game's menu); the others in the room see *Join Alpha's game as player 2*.
+The friend's device runs no game and needs no game data.
+
+- The friend's controls (touch controls, a controller, or the keyboard and
+  mouse) go to the host over a WebRTC data channel sixty times a second; the
+  host's page hands them to the game as a controller of its own, the last
+  slot of the shared state (`src/web_shared.h`), which the game's controller
+  code never merges with the host's keyboard (`port/linux/src/xinput_sdl.c`).
+  Aiming by dragging or with a mouse goes as motion, which the game adds to
+  that player's aim as it does the host's mouse.
+- The host's page streams the friend's view back as WebRTC video, with the
+  game's sound: the lower half of the screen while the game shows two
+  views (the game says how many, `split_views`), all of it in the menus.
+  The friend can pick another part.
+- Their connection is signalled over the room's encrypted topic, apart from
+  the room's own connections (`site/coop.js`).
+
 ## How the port operates
 
 ### WebAssembly

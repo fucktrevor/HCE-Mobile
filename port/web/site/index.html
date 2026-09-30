@@ -133,6 +133,16 @@
         <label class="row"><input type="checkbox" id="online-public"> List this room in Open games</label>
         <label class="row" id="online-note-row" hidden>Note
           <input id="online-note" type="text" maxlength="48" placeholder="Slayer on Blood Gulch, all welcome"></label>
+        <div class="coop" id="coop-section">
+          <h3>Co-op</h3>
+          <label class="row"><input type="checkbox" id="coop-host"> Host co-op: a friend in this room plays as player 2
+            from their own device</label>
+          <p class="small" id="coop-status"></p>
+          <div id="coop-hosts" class="coop-hosts"></div>
+          <p class="small">The host plays the game and streams player 2's view to the friend, who needs no game
+            data. In Halo the host picks Multiplayer &gt; Cooperative Play for the campaign (the full game), or Split
+            Screen; the friend presses Jump (A) to join as player 2.</p>
+        </div>
       </div>
       <div class="lobby">
         <h3>Open games <span id="lobby-count" class="small"></span></h3>
@@ -250,6 +260,19 @@
     <label class="row"><input type="checkbox" data-rule="128"> Third-person camera (just for you)</label>
   </div>
 </div>
+<div id="coop-view" class="coop-view" hidden>
+  <video id="coop-video" playsinline autoplay></video>
+  <div class="coop-bar">
+    <span id="coop-friend-status">Connecting…</span>
+    <select id="coop-part" aria-label="What to show">
+      <option value="auto">My view</option>
+      <option value="whole">Whole screen</option>
+      <option value="top">Top half</option>
+      <option value="bottom">Bottom half</option>
+    </select>
+    <button type="button" class="button small-button" id="coop-leave">Leave</button>
+  </div>
+</div>
 <div id="game-menu" class="overlay game-menu" hidden>
   <div class="panel">
     <h2>Menu</h2>
@@ -262,6 +285,9 @@
       <button type="button" class="button small-button" id="menu-edit-layout">Edit layout</button></label>
     <div class="row buttons"><button type="button" class="button" id="menu-chat">Chat</button>
       <button type="button" class="button" id="menu-custom">Custom content</button></div>
+    <label class="row" id="menu-coop-row" hidden><input type="checkbox" id="menu-coop"> Host co-op (a friend in the room plays
+      as player 2)</label>
+    <p class="small" id="menu-coop-status" hidden></p>
     <label class="row"><input type="checkbox" id="menu-silent"> Sound when the phone is on silent</label>
     <label class="row"><input type="checkbox" id="menu-fps"> Show the frame rate</label>
     <label class="row" id="menu-game-row">Game
@@ -298,6 +324,7 @@
 
 <script src="input.js"></script>
 <script src="net.js"></script>
+<script src="coop.js"></script>
 <script src="lobby.js"></script>
 <script src="app.js"></script>
 </body>

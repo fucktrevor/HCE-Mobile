@@ -67,6 +67,13 @@ static struct controller keyboard_device;
 static DWORD reported_gamepads = 0;
 static BOOL reported_keyboard = FALSE;
 
+#ifdef HALO_WEB
+/* port/web/src/web_sdl.c: remote co-op's second player */
+int web_gamepad_look(SDL_Gamepad *gamepad, float *x, float *y);
+int web_gamepad_is_remote(SDL_Gamepad *gamepad);
+static int sdl_gamepads(SDL_Gamepad *gamepads[PORT_COUNT]);
+#endif
+
 /* ---------- mouse */
 
 static pthread_mutex_t mouse_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -103,6 +110,23 @@ int halo_linux_mouse_look(short gamepad_index, float *yaw, float *pitch)
 
 	*yaw = 0.0f;
 	*pitch = 0.0f;
+#ifdef HALO_WEB
+	/* a remote co-op player aims with the motion their device sends */
+	if (gamepad_index > 0 && gamepad_index < PORT_COUNT)
+	{
+		SDL_Gamepad *gamepads[PORT_COUNT];
+		int count = sdl_gamepads(gamepads);
+
+		if (gamepad_index < count && gamepads[gamepad_index] &&
+			web_gamepad_look(gamepads[gamepad_index], &x, &y))
+		{
+			*yaw = -x * scale * mouse_sensitivity();
+			*pitch = -y * scale * mouse_sensitivity();
+			return TRUE;
+		}
+		return FALSE;
+	}
+#endif
 	if (gamepad_index != 0)
 		return FALSE;
 	if (invert < 0)
@@ -324,6 +348,17 @@ static int sdl_gamepads(SDL_Gamepad *gamepads[PORT_COUNT])
 	}
 #endif
 	SDL_free(ids);
+#ifdef HALO_WEB
+	/* a remote co-op player is always a player of their own, never the
+	keyboard's port 0 (the page gives them the last slot, so they come
+	first only when the host has no controller) */
+	if (found == 1 && web_gamepad_is_remote(gamepads[0]))
+	{
+		gamepads[1] = gamepads[0];
+		gamepads[0] = NULL;
+		found = 2;
+	}
+#endif
 	return found;
 }
 
@@ -499,7 +534,7 @@ DWORD WINAPI XInputGetState(HANDLE device, PXINPUT_STATE state)
 		wheel_update();
 		if (!console_is_active())
 			keyboard_gamepad(&input, &state->Gamepad);
-		if (count > 0)
+		if (count > 0 && gamepads[0])
 			sdl_gamepad_state(gamepads[0], &state->Gamepad);
 		test_input_gamepad(&state->Gamepad);
 	}

@@ -27,7 +27,11 @@ so the layout is the same on both sides.
 #define WEB_SHARED_VERSION 1
 
 #define WEB_EVENT_CAPACITY 256
-#define WEB_GAMEPAD_COUNT 5
+#define WEB_GAMEPAD_COUNT 6
+/* the last slot: the second player of a remote co-op game (site/coop.js),
+whose controller is on another device */
+#define WEB_REMOTE_GAMEPAD_SLOT 5
+#define WEB_REMOTE_GAMEPAD_ID 2000
 #define WEB_AUDIO_RING_FRAMES 8192 /* a power of two */
 /* the rings of packets to and from the other players (web_net.c, net.js) */
 #define WEB_NET_OUT_BYTES (1024 * 1024) /* powers of two */
@@ -69,6 +73,9 @@ struct web_gamepad
 	between two of the game's frames still counts once (bits 30 and 31: the
 	left and right triggers) */
 	uint32_t pressed;
+	/* aiming by dragging or with a mouse on another device (remote co-op):
+	motion in sixteenths of a pixel, which the page adds and the game takes */
+	int32_t look_x, look_y;
 };
 
 struct web_shared_state
@@ -115,7 +122,10 @@ struct web_shared_state
 	volatile int32_t custom_rules;
 	volatile int32_t custom_character;
 	volatile int32_t custom_character_status;
-	volatile int32_t reserved[13];
+	/* the game's state for the page: the views on the screen (the local
+	players of a split screen game, 0 in the menus), for remote co-op */
+	volatile int32_t split_views;
+	volatile int32_t reserved[12];
 
 	/* online play (web_net.c, port/web/site/net.js): this machine's address
 	on the players' network (network byte order, from the page), and the

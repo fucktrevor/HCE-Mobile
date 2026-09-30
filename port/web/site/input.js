@@ -28,6 +28,9 @@ const HaloInput = (() => {
   const GAMEPAD_TYPE_PS5 = 6;
   const TOUCH_SLOT = 4;
   const TOUCH_ID = 1000;
+  // remote co-op's second player (coop.js; web_shared.h WEB_REMOTE_GAMEPAD_*)
+  const REMOTE_SLOT = 5;
+  const REMOTE_ID = 2000;
 
   // KeyboardEvent.code -> SDL_Scancode (USB HID usage)
   const SCANCODES = {};
@@ -56,7 +59,7 @@ const HaloInput = (() => {
   const touchPad = { buttons: 0, axes: [0, 0, 0, 0, 0, 0], tapped: 0, tappedAxes: [0, 0] };
   // the buttons and triggers each slot last had, to flag new presses
   const lastPressed = [];
-  const rumbleSeen = [0, 0, 0, 0, 0];
+  const rumbleSeen = [0, 0, 0, 0, 0, 0];
 
   function word(offset) { return (shared.base + offset) >> 2; }
 
@@ -692,6 +695,142 @@ const HaloInput = (() => {
     controllerListener = listener;
   }
 
+  // ---------- remote co-op (coop.js)
+
+  // On the host: the second player's controller, from their device. The
+  // presses they made since the last message count even if already released,
+  // and their aiming motion (sixteenths of a pixel) adds up until the game
+  // takes it (port/linux/src/xinput_sdl.c).
+  function remoteInput(buttons, pressed, axes, lookX, lookY) {
+    if (!shared) return;
+    const { i32, offsets } = shared;
+    writeGamepad(REMOTE_SLOT, true, REMOTE_ID, GAMEPAD_TYPE_XBOXONE, buttons, axes);
+    const base = word(offsets.gamepads + REMOTE_SLOT * offsets.gamepadSize);
+    if (pressed) Atomics.or(i32, base + 14, pressed);
+    if (lookX) Atomics.add(i32, base + 15, lookX);
+    if (lookY) Atomics.add(i32, base + 16, lookY);
+  }
+
+  function remoteDisconnect() {
+    if (!shared) return;
+    writeGamepad(REMOTE_SLOT, false, 0, 0, 0, [0, 0, 0, 0, 0, 0]);
+  }
+
+  // the host's game rumbles the second player's controller: [strong, weak, ms]
+  // for each new request, or null
+  function remoteRumble() {
+    if (!shared) return null;
+    const { i32, offsets } = shared;
+    const base = word(offsets.gamepads + REMOTE_SLOT * offsets.gamepadSize);
+    const serial = i32[base + 12];
+    if (serial === rumbleSeen[REMOTE_SLOT]) return null;
+    rumbleSeen[REMOTE_SLOT] = serial;
+    return [i32[base + 10], i32[base + 11], i32[base + 13]];
+  }
+
+  // On the second player's device, which runs no game: the same controls
+  // (touch, controllers, keyboard and mouse) gathered into a memory of its
+  // own, and read back as one controller's state for the host.
+  const localKeys = new Set();
+  const localMouse = new Set();
+  const localLook = { x: 0, y: 0 };
+
+  function attachLocal(options) {
+    const offsets = { eventWrite: 0, eventRead: 4, events: 16, eventSize: 32, eventCapacity: 256,
+      gamepads: 16 + 256 * 32, gamepadSize: 68, gamepadCount: 6 };
+    const memory = { buffer: new ArrayBuffer(offsets.gamepads + offsets.gamepadSize * 6 + 64) };
+    attach({ memory, base: 0, offsets, canvas: options.surface, touchRoot: options.touchRoot, touch: options.touch,
+      touchLayout: options.touchLayout, touchCustom: options.touchCustom, touchOpacity: options.touchOpacity });
+  }
+
+  // the keyboard and mouse as a controller, as port/linux/src/xinput_sdl.c
+  // reads them for the host's own player
+  function keyboardPad() {
+    const k = (code) => localKeys.has(code);
+    let buttons = 0;
+    const set = (down, bit) => { if (down) buttons |= 1 << bit; };
+    set(k(44) || k(40), BUTTON.SOUTH);
+    set(k(9) || k(42) || localMouse.has(4), BUTTON.EAST);
+    set(k(8) || k(21), BUTTON.WEST);
+    set(k(43), BUTTON.NORTH);
+    set(k(20), BUTTON.LEFT_SHOULDER);
+    set(k(27), BUTTON.RIGHT_SHOULDER);
+    set(k(224) || k(6), BUTTON.LEFT_STICK);
+    set(k(29) || localMouse.has(2), BUTTON.RIGHT_STICK);
+    set(k(41), BUTTON.START);
+    set(k(58), BUTTON.BACK);
+    set(k(82), BUTTON.DPAD_UP);
+    set(k(81), BUTTON.DPAD_DOWN);
+    set(k(80), BUTTON.DPAD_LEFT);
+    set(k(79), BUTTON.DPAD_RIGHT);
+    const x = (k(7) ? 1 : 0) - (k(4) ? 1 : 0);
+    const y = (k(22) ? 1 : 0) - (k(26) ? 1 : 0);
+    const axes = [x * 32767, y * 32767, 0, 0, (localMouse.has(3) || k(10)) ? 32767 : 0, localMouse.has(1) ? 32767 : 0];
+    return [buttons, axes];
+  }
+
+  // this device's controls since the last call: { buttons, pressed, axes, lookX, lookY }
+  function readLocal() {
+    if (!shared) return null;
+    pollGamepads();
+    const { i32, f32, offsets } = shared;
+    // the keyboard, the mouse and the touch aiming arrive as events
+    const writeIndex = word(offsets.eventWrite);
+    const readIndex = word(offsets.eventRead);
+    const write = Atomics.load(i32, writeIndex);
+    let read = Atomics.load(i32, readIndex);
+    for (; read < write; read++) {
+      const slot = word(offsets.events + (read % offsets.eventCapacity) * offsets.eventSize);
+      const type = i32[slot];
+      if (type === EVENT.KEY) {
+        if (i32[slot + 2]) localKeys.add(i32[slot + 1]);
+        else localKeys.delete(i32[slot + 1]);
+      } else if (type === EVENT.MOUSE_MOTION) {
+        localLook.x += f32[slot + 5];
+        localLook.y += f32[slot + 6];
+      } else if (type === EVENT.MOUSE_BUTTON) {
+        if (i32[slot + 2]) localMouse.add(i32[slot + 1]);
+        else localMouse.delete(i32[slot + 1]);
+      } else if (type === EVENT.FOCUS && !i32[slot + 1]) {
+        localKeys.clear();
+        localMouse.clear();
+      }
+    }
+    Atomics.store(i32, readIndex, read);
+    // a controller if one is connected, else the touch controls
+    let buttons = 0, pressed = 0;
+    let axes = [0, 0, 0, 0, 0, 0];
+    for (const slot of [0, 1, 2, 3, TOUCH_SLOT]) {
+      const base = word(offsets.gamepads + slot * offsets.gamepadSize);
+      if (!i32[base]) continue;
+      buttons = i32[base + 3];
+      axes = Array.from(i32.subarray(base + 4, base + 10));
+      pressed = Atomics.exchange(i32, base + 14, 0);
+      break;
+    }
+    const [keyButtons, keyAxes] = keyboardPad();
+    buttons |= keyButtons;
+    for (let i = 0; i < 6; i++) if (keyAxes[i]) axes[i] = keyAxes[i];
+    const lookX = Math.round(localLook.x * 16);
+    const lookY = Math.round(localLook.y * 16);
+    localLook.x -= lookX / 16;
+    localLook.y -= lookY / 16;
+    return { buttons: buttons >>> 0, pressed: pressed >>> 0, axes, lookX, lookY };
+  }
+
+  // rumble the second player's controller, as the host's game asks
+  function rumbleLocal(strong, weak, milliseconds) {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (const gamepad of pads) {
+      const actuator = gamepad && gamepad.connected && gamepad.vibrationActuator;
+      if (!actuator || !actuator.playEffect) continue;
+      if (strong <= 0 && weak <= 0) actuator.reset?.();
+      else actuator.playEffect('dual-rumble', { duration: Math.min(milliseconds || 1000, 5000),
+        strongMagnitude: strong / 65535, weakMagnitude: weak / 65535 }).catch(() => {});
+    }
+  }
+
   return { attach, pollGamepads, setLookSensitivity, pressBack, onController, connectedControllers, setTouchLayout,
-    editTouchLayout, isTouchEnabled: () => touchEnabled };
+    editTouchLayout, isTouchEnabled: () => touchEnabled, remoteInput, remoteDisconnect, remoteRumble, attachLocal, readLocal,
+    rumbleLocal };
 })();

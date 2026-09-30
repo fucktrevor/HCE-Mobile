@@ -4,7 +4,8 @@
 
 Halo CE Mobile is Halo: Combat Evolved as an installable web app: the game
 compiled to WebAssembly, with touch and controller input, online System Link
-play with matchmaking and text chat, custom content (game rules like low
+play with matchmaking and text chat, remote co-op (a friend plays player 2
+from their own phone or computer), custom content (game rules like low
 gravity and big heads, a third-person camera, and playing the campaign as a
 Grunt, an Elite, a Hunter and more), and a game library for your own disc
 images. It is a fork of

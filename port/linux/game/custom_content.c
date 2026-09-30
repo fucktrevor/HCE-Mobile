@@ -32,6 +32,7 @@ Chief.
 #include "game/game_globals.h"
 #include "game/player_control.h"
 #include "game/players.h"
+#include "interface/ui_widget.h"
 #include "items/weapons.h"
 #include "models/model_definitions.h"
 #include "objects/object_definitions.h"
@@ -50,6 +51,7 @@ long web_custom_rules(void);
 long web_custom_character(void);
 void web_custom_set_character_status(long status);
 void web_custom_message(char const *text);
+void web_custom_set_split_views(long views);
 long web_custom_debug(void);
 void platform_log(char const *format, ...);
 
@@ -475,6 +477,9 @@ void custom_content_update(
 
 	if (game_in_progress())
 		update_character();
+
+	/* for remote co-op: which part of the screen is the second player's */
+	web_custom_set_split_views(game_in_progress() && !main_menu_is_active() ? local_player_count() : 0);
 
 	if (web_custom_debug())
 	{

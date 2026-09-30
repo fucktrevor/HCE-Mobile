@@ -59,6 +59,7 @@ const HaloNet = (() => {
     chatSent: 0,
     rules: 0,            // the game rules this machine gives the room, as its host
     rulesHost: false,
+    coopHost: null,      // remote co-op: { busy } while this machine hosts
   };
 
   function randomId() {
@@ -255,6 +256,8 @@ const HaloNet = (() => {
     // the room's game rules, from its host (so a player who comes in later
     // has them within a few seconds)
     if (state.rulesHost) message.rules = state.rules;
+    // remote co-op: this machine's game takes a second player (coop.js)
+    if (state.coopHost) message.coop = state.coopHost;
     publish(message);
   }
 
@@ -320,6 +323,15 @@ const HaloNet = (() => {
         emit('rules', { rules: message.rules & RULES_MASK, name: String(message.name || 'Player').slice(0, 24) });
       }
       if (message.type === 'rules') return;
+    }
+    if (message.type === 'hello') {
+      emit('coop-host', { id: message.from, name: String(message.name || 'Player').slice(0, 24),
+        coop: message.coop && typeof message.coop === 'object' ? { busy: !!message.coop.busy } : null });
+    }
+    if (message.type === 'coop') {
+      // remote co-op's own connection (coop.js), signalled like the others
+      emit('coop', { from: message.from, name: String(message.name || 'Player').slice(0, 24), data: message.data || {} });
+      return;
     }
     if (message.type === 'hello') {
       const known = state.peers.get(message.from);
@@ -530,6 +542,16 @@ const HaloNet = (() => {
     if (changed && host && state.room) publish({ type: 'rules', rules: state.rules, name: playerName() }).catch(() => {});
   }
 
+  // Remote co-op (coop.js): hosting, and its signalling to one player
+  function setCoopHost(coop) {
+    state.coopHost = coop ? { busy: !!coop.busy } : null;
+    if (state.room) hello();
+  }
+
+  function coopSignal(to, data) {
+    return publish({ type: 'coop', to, data, name: playerName() });
+  }
+
   // Text chat, to everyone in the room, over the room's (encrypted) topic
   async function sendChat(text) {
     text = String(text || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, CHAT_LENGTH);
@@ -555,5 +577,6 @@ const HaloNet = (() => {
   state.address = localAddress();
 
   return { attach, join, leave, newRoomCode, on, status, addressText, sendChat, CHAT_LENGTH, setRules, RULES_MASK,
+    setCoopHost, coopSignal, iceServers: () => state.iceServers, get id() { return state.id; },
     get address() { return state.address; } };
 })();

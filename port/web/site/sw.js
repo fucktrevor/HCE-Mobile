@@ -24,6 +24,7 @@ const SHELL = [
   'input.js',
   'net.js',
   'lobby.js',
+  'coop.js',
   'style.css',
   'xiso-worker.js',
   'audio-worklet.js',

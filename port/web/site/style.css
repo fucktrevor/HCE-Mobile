@@ -1084,3 +1084,29 @@ body:not(.playing) .chat-feed { display: none; }
 .custom-body label.locked { opacity: 0.55; }
 #custom-character-status.on { color: #9fe870; }
 #custom-character-status.off { color: #ffcf6e; }
+
+/* remote co-op: the host's section, and the friend's view of the host's game */
+.coop { margin-top: 12px; }
+.coop h3 { margin-bottom: 2px; }
+.coop-hosts { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.coop-hosts .button { width: 100%; }
+.coop-view { position: fixed; inset: 0; z-index: 5; background: #000; }
+.coop-view video { width: 100vw; height: 100vh; height: 100dvh; object-fit: contain; display: block; background: #000; }
+.coop-bar {
+  position: fixed;
+  z-index: 12;
+  top: calc(6px + env(safe-area-inset-top));
+  left: calc(8px + env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(46vw, 420px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(4, 7, 12, 0.72);
+  color: #e8eef6;
+  font: 500 13px/1.3 var(--ui-font);
+}
+.coop-bar select { min-height: 30px; border-radius: 6px; border: 1px solid var(--panel-edge); background: #0e1117; color: var(--text); }
+#coop-friend-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.coop-guest #screen { display: none; }

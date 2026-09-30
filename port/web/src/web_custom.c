@@ -30,6 +30,12 @@ void web_custom_set_character_status(long status)
 	__atomic_store_n(&web_shared_state()->custom_character_status, (int32_t)status, __ATOMIC_RELAXED);
 }
 
+/* remote co-op (site/coop.js): the views on the screen */
+void web_custom_set_split_views(long views)
+{
+	__atomic_store_n(&web_shared_state()->split_views, (int32_t)views, __ATOMIC_RELAXED);
+}
+
 /* a line the page shows for a few seconds */
 void web_custom_message(const char *text)
 {

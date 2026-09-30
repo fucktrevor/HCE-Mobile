@@ -567,6 +567,9 @@ can run the game, copies the game data out of the player's disc image
 
   function openGameMenu() {
     $('menu-look').value = settings.look;
+    $('menu-coop-row').hidden = !HaloNet.status().room;
+    $('menu-coop').checked = HaloCoop.hosting;
+    renderCoop();
     $('menu-layout').value = settings.touchLayout;
     $('menu-layout-row').hidden = !HaloInput.isTouchEnabled();
     $('menu-silent').checked = settings.silentSound;
@@ -593,6 +596,7 @@ can run the game, copies the game data out of the player's disc image
     $('menu-button').hidden = false;
     $('menu-button').onclick = openGameMenu;
     $('menu-resume').onclick = closeGameMenu;
+    $('menu-coop').onchange = (event) => HaloCoop.setHosting(event.target.checked);
     $('menu-custom').onclick = () => {
       closeGameMenu();
       openCustom();
@@ -763,12 +767,12 @@ can run the game, copies the game data out of the player's disc image
 
   function readOffsets(module) {
     const pointer = module._web_shared_offsets();
-    const words = new Int32Array(state.memory.buffer, pointer, 35);
+    const words = new Int32Array(state.memory.buffer, pointer, 36);
     const names = ['size', 'eventWrite', 'eventRead', 'events', 'eventSize', 'gamepads', 'gamepadSize',
       'displayWidth', 'displayHeight', 'frameCounter', 'framesPresented', 'vsync', 'audioRate', 'audioOpen',
       'audioWrite', 'audioRead', 'audioUnderruns', 'audioRing', 'audioRingFrames', 'pageHidden', 'gameStarted',
       'eventCapacity', 'gamepadCount', 'netLocalAddress', 'netOutWrite', 'netOutRead', 'netInWrite', 'netInRead',
-      'netOut', 'netOutBytes', 'netIn', 'netInBytes', 'customRules', 'customCharacter', 'customCharacterStatus'];
+      'netOut', 'netOutBytes', 'netIn', 'netInBytes', 'customRules', 'customCharacter', 'customCharacterStatus', 'splitViews'];
     const offsets = {};
     names.forEach((name, index) => { offsets[name] = words[index]; });
     return offsets;
@@ -914,6 +918,7 @@ can run the game, copies the game data out of the player's disc image
         },
       });
       node.connect(context.destination);
+      state.audioNode = node; // (remote co-op streams it too)
       Atomics.store(i32, sharedWord('audioOpen'), 1);
       log(`audio: ${context.sampleRate} Hz`);
     } catch (error) {
@@ -978,6 +983,8 @@ can run the game, copies the game data out of the player's disc image
           canvas.height = bitmap.height;
         }
         if (state.presented === BACKDROP_FRAME && !state.hasBackdrop) captureBackdrop(bitmap);
+        // remote co-op: player 2's part of the frame, to their device
+        if (HaloCoop.streaming) HaloCoop.frame(bitmap);
         context.transferFromImageBitmap(bitmap);
         state.presented = (state.presented || 0) + 1;
       },
@@ -1152,6 +1159,105 @@ can run the game, copies the game data out of the player's disc image
       }
     });
     applyCustom();
+  }
+
+  // ---------- remote co-op (coop.js): a friend in the room plays the host's
+  // game as player 2 from their own device
+
+  state.coopHosts = new Map(); // id -> { name, busy, seen }: the room's co-op hosts
+
+  function renderCoop() {
+    const status = HaloCoop.hostStatus();
+    let text = '';
+    if (status.enabled) {
+      if (status.guest && status.connected) text = `${status.guest} is player 2` + (status.rtt !== null ? ` (${status.rtt} ms)` : '') + '.';
+      else if (status.guest) text = `${status.guest} is joining…`;
+      else text = 'Waiting for a friend in the room to join as player 2.';
+    }
+    for (const id of ['coop-status', 'menu-coop-status']) {
+      $(id).textContent = text;
+      $(id).hidden = !text;
+    }
+    $('coop-host').checked = status.enabled;
+    const list = $('coop-hosts');
+    list.textContent = '';
+    const now = Date.now();
+    for (const [id, host] of state.coopHosts) {
+      if (now - host.seen > 10000) {
+        state.coopHosts.delete(id);
+        continue;
+      }
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'button primary';
+      button.textContent = host.busy ? `${host.name}'s co-op is full` : `Join ${host.name}'s game as player 2`;
+      button.disabled = host.busy || state.started;
+      button.onclick = () => joinCoop(id, host.name);
+      list.appendChild(button);
+    }
+  }
+
+  // the friend's side: the host's game on this screen, and this device's controls
+  function joinCoop(id, name) {
+    state.coopGuest = true;
+    document.body.classList.add('playing', 'coop-guest');
+    $('coop-view').hidden = false;
+    const root = document.documentElement;
+    if (root.requestFullscreen && !navigator.standalone) root.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+    if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    requestWakeLock();
+    const video = $('coop-video');
+    HaloInput.attachLocal({
+      surface: video,
+      touchRoot: $('touch'),
+      touch: settings.touch,
+      touchLayout: settings.touchLayout,
+      touchCustom: (settings.touchCustom || {})[settings.touchLayout],
+      touchOpacity: settings.touchOpacity,
+    });
+    HaloInput.setLookSensitivity(settings.look);
+    $('touch').hidden = !settings.touch;
+    $('coop-part').onchange = (event) => HaloCoop.setView(event.target.value);
+    $('coop-leave').onclick = () => {
+      HaloCoop.leave();
+      location.reload();
+    };
+    $('coop-friend-status').textContent = `Joining ${name}'s game…`;
+    HaloCoop.join(id, name, video);
+  }
+
+  function setUpCoop() {
+    HaloCoop.configure({
+      audio: () => ({ context: state.audio, node: state.audioNode }),
+      splitViews: () => (state.shared ? Atomics.load(new Int32Array(state.memory.buffer), sharedWord('splitViews')) : 0),
+    });
+    $('coop-host').onchange = (event) => HaloCoop.setHosting(event.target.checked);
+    HaloCoop.on((type, detail) => {
+      if (type === 'host') renderCoop();
+      else if (type === 'message') toast(detail);
+      else if (type === 'friend') {
+        const line = $('coop-friend-status');
+        if (detail.state === 'playing') {
+          line.textContent = `Player 2 in ${detail.host}'s game` + (detail.rtt !== undefined ? ` · ${detail.rtt} ms` : '');
+        } else if (detail.state === 'failed' || detail.state === 'ended') {
+          line.textContent = detail.reason;
+          toast(detail.reason, 6000);
+        }
+      }
+    });
+    HaloNet.on((type, detail) => {
+      if (type === 'coop-host') {
+        if (detail.coop) state.coopHosts.set(detail.id, { name: detail.name, busy: detail.coop.busy, seen: Date.now() });
+        else state.coopHosts.delete(detail.id);
+        renderCoop();
+      } else if (type === 'status' && !detail.room) {
+        state.coopHosts.clear();
+        if (HaloCoop.hosting) HaloCoop.setHosting(false);
+        renderCoop();
+      }
+    });
+    setInterval(renderCoop, 5000);
+    renderCoop();
   }
 
   // ---------- online play (net.js)
@@ -1621,6 +1727,7 @@ can run the game, copies the game data out of the player's disc image
     await ensureIsolation();
     setUpOnline();
     setUpCustom();
+    setUpCoop();
     const ok = await runChecks();
     if (!ok) return;
     // all passed: one line, the details a tap away
