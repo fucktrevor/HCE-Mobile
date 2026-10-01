@@ -818,9 +818,9 @@ short cache_file_read(
 	/* port: a tag brought in from a campaign level reads its pixels and
 	samples from that level (port/linux/game/custom_characters.c) */
 	{
-		extern HANDLE custom_characters_file_for_tag(long tag_index);
+		extern int custom_characters_file_for_tag(long tag_index);
 
-		request->pad1F = custom_characters_file_for_tag(tag_index) != NULL;
+		request->pad1F = (byte)custom_characters_file_for_tag(tag_index);
 	}
 #endif
 	cache_file_windows_thread_wake();
@@ -1122,9 +1122,9 @@ static void cache_file_windows_thread_proc(
 #ifdef HALO_WEB
 			if (best_request->pad1F)
 			{
-				extern HANDLE custom_characters_donor_handle(void);
+				extern HANDLE custom_characters_donor_handle(int file);
 
-				file = custom_characters_donor_handle();
+				file = custom_characters_donor_handle(best_request->pad1F);
 			}
 #endif
 			match_assert(

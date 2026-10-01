@@ -249,7 +249,18 @@ wchar_t *unicode_string_list_get_string(long tag_index, short string_index)
 	if (tag_index != NONE)
 	{
 		struct string_list *list = unicode_string_list_definition_get(tag_index);
+#ifdef HALO_WEB
+		/* port: the text of The Silent Cartographer as a multiplayer map
+		(port/linux/game/custom_characters.c) */
+		extern wchar_t *custom_arena_string(char const *list_name, short string_index);
+		wchar_t *arena_string = custom_arena_string(tag_get_name(tag_index), string_index);
 
+		if (arena_string)
+		{
+			result = arena_string;
+		}
+		else
+#endif
 		if (string_index >= 0 && string_index < list->strings.count)
 		{
 			struct string_list_entry *entry = TAG_BLOCK_GET_ELEMENT(

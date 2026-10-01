@@ -3153,6 +3153,26 @@ static boolean create_and_begin_editing_new_player_profile(
 	return result;
 }
 
+#ifdef HALO_WEB
+/* port: the multiplayer maps, and The Silent Cartographer as one where the
+copy of the game has the campaign (port/linux/game/custom_characters.c) */
+extern boolean custom_arena_available(void);
+
+static char *web_multiplayer_levels[14];
+
+static short web_multiplayer_level_list(
+	char ***levels)
+{
+	short level_count = 13;
+
+	csmemcpy(web_multiplayer_levels, event_handler_functions.multiplayer_levels, 13 * sizeof(char *));
+	if (custom_arena_available())
+		web_multiplayer_levels[level_count++] = "levels\\b30\\b30";
+	*levels = web_multiplayer_levels;
+	return level_count;
+}
+#endif
+
 static boolean multiplayer_level_list_initialize(
 	struct widget_instance *widget,
 	struct event_record *event,
@@ -3161,6 +3181,13 @@ static boolean multiplayer_level_list_initialize(
 	char map_name[256];
 	struct ui_widget_definition *definition = ui_widget_definition_get(widget->definition_tag_index);
 	short level_count = 13;
+#ifdef HALO_WEB
+	char **levels;
+
+	level_count = web_multiplayer_level_list(&levels);
+#else
+	char **levels = event_handler_functions.multiplayer_levels;
+#endif
 
 	match_vassert("c:\\halo\\SOURCE\\interface\\ui_widget_event_handler_functions.c", 1228,
 		definition->type == 2,
@@ -3168,14 +3195,14 @@ static boolean multiplayer_level_list_initialize(
 	match_vassert("c:\\halo\\SOURCE\\interface\\ui_widget_event_handler_functions.c", 1229,
 		definition->child_count == 3,
 		"expected 3 list items for 'multiplayer level list' widget");
-	widget->generated_list = event_handler_functions.multiplayer_levels;
+	widget->generated_list = levels;
 	widget->generated_count = level_count;
 	if (saved_game_file_retrieve_last_used_multiplayer_map(map_name))
 	{
 		widget->data3C.selected_index = 0;
 		while (widget->data3C.selected_index < level_count &&
 			_stricmp(map_name,
-				event_handler_functions.multiplayer_levels[widget->data3C.selected_index]))
+				levels[widget->data3C.selected_index]))
 		{
 			widget->data3C.selected_index++;
 		}
@@ -5750,10 +5777,22 @@ static boolean multiplayer_level_select(
 		definition->child_count == 3,
 		"expected 3 list items for 'multiplayer level list' widget");
 	level_list = widget->child->child;
+#ifdef HALO_WEB
+	{
+		char **levels;
+		short level_count = web_multiplayer_level_list(&levels);
+
+		match_vassert("c:\\halo\\SOURCE\\interface\\ui_widget_event_handler_functions.c", 1298,
+			level_list->data3C.selected_index >= 0 && level_list->data3C.selected_index < level_count,
+			"invalid multiplayer level specified from 'multiplayer level list' list widget");
+		map_name = levels[level_list->data3C.selected_index];
+	}
+#else
 	match_vassert("c:\\halo\\SOURCE\\interface\\ui_widget_event_handler_functions.c", 1298,
 		level_list->data3C.selected_index >= 0 && level_list->data3C.selected_index < 13,
 		"invalid multiplayer level specified from 'multiplayer level list' list widget");
 	map_name = event_handler_functions.multiplayer_levels[level_list->data3C.selected_index];
+#endif
 	file = fopen("d:\\map_automation.txt", "r");
 	if (file)
 	{

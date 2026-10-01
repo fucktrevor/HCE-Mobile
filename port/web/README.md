@@ -281,6 +281,33 @@ game has the campaign:
 - The camera follows a character from behind; the Elite's from lower than
   its camera track (`camera/following_camera.c`).
 
+## The Silent Cartographer as a multiplayer map
+
+With the campaign in the copy of the game, the multiplayer map list ends with
+*Cartographer*: The Silent Cartographer's island as a multiplayer map, for
+split screen and System Link (`port/linux/game/custom_characters.c`, with
+`HALO_WEB` hooks in the map list, `interface/ui_widget_event_handler_functions.c`,
+and its text, `text/text_group.c`). As the level loads for a multiplayer
+game:
+
+- Blood Gulch lends it what multiplayer needs and a campaign level has not,
+  the same way the characters are brought in: the multiplayer globals (flag,
+  ball, hill shader, multiplayer biped, vehicles, announcer), the weapon
+  list, the item collections, and the multiplayer menus. Blood Gulch is
+  decompressed once into `z:\arena-bloodgulch.map`.
+- The level becomes a multiplayer scenario. Players start where the level's
+  AI squads stand outside (the beach, the valley, the crash site), red on the
+  island's west and blue on its east; each team's flag is at its side's
+  furthest start, the oddballs and two hills in the middle, a race track
+  across. Weapons and powerups (rocket launcher, sniper rifle, shotgun,
+  overshield, camouflage, ...) wait near every third start, and everyone
+  starts with Blood Gulch's equipment.
+- The campaign stays out: no AI is placed, no script runs by itself, there
+  are no placed characters and no switch to the interior.
+- The characters (Elite, Grunt, Hunter, Marine) are the level's own.
+
+Everyone in the game needs the campaign too.
+
 ## Multiplayer maps alone
 
 A split screen game starts with one player: Multiplayer > Split Screen, pick
