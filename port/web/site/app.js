@@ -456,15 +456,17 @@ can run the game, copies the game data out of the player's disc image
     return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
   }
 
-  const MAP_CACHE = /^save\/z\/cache\d+\.map$/i;
+  // the game's caches of maps: z:\cacheNNN.map, and the campaign level the
+  // characters in multiplayer come from (z:\characters-b30.map)
+  const MAP_CACHE = /^save\/z\/(cache\d+|characters-\w+)\.map(\.part)?$/i;
 
   async function exportSaves() {
     const files = [];
     async function walk(directory, prefix) {
       for await (const [name, handle] of directory.entries()) {
         if (handle.kind === 'directory') await walk(handle, prefix + name + '/');
-        // not z:\cacheNNN.map, the game's cache of maps (hundreds of MB),
-        // which it builds again from the maps
+        // not the game's caches of maps (hundreds of MB), which it builds
+        // again from the maps
         else if (!MAP_CACHE.test(prefix + name)) {
           files.push({ name: prefix + name, bytes: new Uint8Array(await (await handle.getFile()).arrayBuffer()) });
         }
@@ -1117,7 +1119,11 @@ can run the game, copies the game data out of the player's disc image
   // each frame. Online, the room's host's rules are everyone's.
 
   const RULE_NAMES = { 1: 'Infinite ammo', 2: 'Low gravity', 4: 'Speed boost', 8: 'Super jump', 16: 'Big heads',
-    32: 'One-shot kills', 64: 'Invincible', 128: 'Third-person camera' };
+    32: 'One-shot kills', 64: 'Invincible', 128: 'Third-person camera',
+    256: 'Master Chief only' };
+  // the characters multiplayer has (brought in from a campaign level:
+  // port/linux/game/custom_characters.c)
+  const MULTIPLAYER_CHARACTERS = [2, 3, 5, 6];
   const CHARACTER_NAMES = ['', 'Master Chief', 'Marine', 'Grunt', 'Jackal', 'Elite', 'Hunter', 'Flood combat form',
     'Flood Elite', 'Infection form', 'Sentinel', '343 Guilty Spark', 'Captain Keyes'];
 
@@ -1156,14 +1162,18 @@ can run the game, copies the game data out of the player's disc image
     const code = characterStatus();
     status.className = 'small';
     if (!character) status.textContent = '';
-    else if (!state.started) status.textContent = `You'll play as the ${CHARACTER_NAMES[character]} wherever the level has one.`;
+    else if (!state.started) status.textContent = MULTIPLAYER_CHARACTERS.includes(character) ?
+      `You'll play as the ${CHARACTER_NAMES[character]} in the campaign wherever the level has one, and in multiplayer.` :
+      `You'll play as the ${CHARACTER_NAMES[character]} wherever the level has one (in the campaign).`;
     else if (code === 1) {
       status.textContent = `Playing as the ${CHARACTER_NAMES[character]}.`;
       status.classList.add('on');
     } else if (code === 2) {
       status.textContent = `This level has no ${CHARACTER_NAMES[character]}: you're the Master Chief here.`;
       status.classList.add('off');
-    } else status.textContent = `You'll play as the ${CHARACTER_NAMES[character]} in the campaign, wherever the level has one.`;
+    } else status.textContent = MULTIPLAYER_CHARACTERS.includes(character) ?
+      `You'll play as the ${CHARACTER_NAMES[character]} in the campaign wherever the level has one, and in multiplayer from your next spawn.` :
+      `You'll play as the ${CHARACTER_NAMES[character]} in the campaign, wherever the level has one.`;
 
     // the start page's line
     const names = Object.keys(RULE_NAMES).map(Number).filter((bit) => rules & bit).map((bit) => RULE_NAMES[bit]);

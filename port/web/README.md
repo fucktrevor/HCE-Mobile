@@ -231,6 +231,8 @@ left) changes the game while it runs:
   following from behind. A level has only the characters it uses: where the
   character is missing the player stays the Master Chief, and the page says
   so. Covenant and Flood characters have no HUD.
+- Play as an Elite, a Grunt, a Hunter or a Marine in multiplayer (see below).
+  The host can make a game *Master Chief only*.
 - A third-person camera, just for the player who turns it on.
 
 The page writes its choices into the memory it shares with the game
@@ -243,6 +245,41 @@ deathless player); gravity scales the game's gravity, speed the player's
 running speed, and big heads scale each biped's head node and those below
 it. Playing another character swaps the player's unit for a new one of that
 biped, as the game's own "bump possession" cheat does.
+
+### Characters in multiplayer
+
+The multiplayer maps have only the Master Chief, so as one loads the game
+brings the Elite, the Grunt, the Hunter and the Marine in from The Silent
+Cartographer (`port/linux/game/custom_characters.c`), when the copy of the
+game has the campaign:
+
+- The level is decompressed once into `z:\characters-b30.map` (left out of
+  exported saves). Its tag data is read, and the tags the four characters
+  use (bipeds, models, animations, collision, shaders, bitmaps, sounds,
+  effects, and the Hunter's weapon) are copied after the map's own, about
+  4 MB; a tag the map has too (a weapon, an effect) stays the map's. A cache
+  file has no field definitions, so the copy finds tag blocks, tag data,
+  tag references, pointers and Direct3D vertex and index buffers by their
+  shape and points them at the copy; tag indices follow the map's in the
+  level's order, so every machine that brings them in has them at the same
+  indices. Bitmaps' pixels and sounds' samples are read from the level
+  (`cache/cache_files_windows.c`). Dialogue, actors and actor variants are
+  left out.
+- A player spawns as the character they picked (*Play as*), or becomes it
+  in the first three seconds after spawning, when the choice reaches the
+  host a moment after the game starts (`game/players.c`,
+  `custom_content.c`). A change takes effect at the next spawn. A character
+  keeps the weapons it can hold and is given its own when it has none
+  (plasma rifle, plasma pistol, assault rifle, the Hunter's fuel rod
+  cannon); it cannot pick up weapons it has no animations for.
+- Online the host decides: each client tells it its players' characters
+  and whether it has the characters, from which level (a message of the
+  distributed netcode's own, `_distributed_message_characters`), and the
+  host's game spawns them; its objects reach the clients as any others. If
+  anyone in the game does not have them (a multiplayer-only copy),
+  everyone is the Master Chief and the page says why.
+- The camera follows a character from behind; the Elite's from lower than
+  its camera track (`camera/following_camera.c`).
 
 ## Multiplayer maps alone
 

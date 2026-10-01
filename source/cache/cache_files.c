@@ -337,6 +337,13 @@ void scenario_tags_unload(
 	tags_header_deregister_vertex_and_index_buffers(cache_file_globals.tag_header);
 	cache_file_globals.tags_loaded = FALSE;
 	global_tag_instances = NULL;
+#ifdef HALO_WEB
+	{
+		extern void custom_characters_tags_unloaded(void);
+
+		custom_characters_tags_unloaded();
+	}
+#endif
 
 	return;
 }
@@ -703,6 +710,16 @@ long scenario_tags_load(
 				extern void pal_tags_loaded(char const *build);
 
 				pal_tags_loaded(cache_file_globals.header.build);
+			}
+#endif
+#ifdef HALO_WEB
+			/* port: the campaign's characters, brought into a multiplayer
+			map (port/linux/game/custom_characters.c) */
+			{
+				extern void custom_characters_tags_loaded(void *tag_header, char const *map_name);
+
+				custom_characters_tags_loaded(cache_file_globals.tag_header, cache_file_globals.header.name);
+				global_tag_instances = cache_file_globals.tag_header->tag_instances;
 			}
 #endif
 			result = cache_file_globals.tag_header->scenario_tag_index;

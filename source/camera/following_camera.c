@@ -271,6 +271,20 @@ void following_camera_update(
 		command->depth = MAX(
 			(command->depth - 0.6f) * camera->distance_scale + 0.6f,
 			0.6f);
+#ifdef HALO_WEB
+		/* port: a character the camera's track was not made for is followed
+		from as far, and as high, as it suits (port/linux/game/custom_content.c) */
+		{
+			extern void custom_content_camera_adjust(long unit_index, real *distance_scale, real *height);
+			real scale, height;
+
+			custom_content_camera_adjust(camera_info.unit_index, &scale, &height);
+			command->offset.i *= scale;
+			command->offset.j *= scale;
+			command->depth *= scale;
+			command->offset.k += height;
+		}
+#endif
 
 		object_get_velocities(camera_info.unit_index, &command->velocity, NULL);
 		SET_FLAG(command->flags, 0, TRUE);

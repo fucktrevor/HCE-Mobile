@@ -54,6 +54,9 @@ enum
 	_distributed_message_relayed_actions,
 	/* the unreliable messages of a tick to one machine, in one datagram */
 	_distributed_message_batch,
+	/* (the web port) a client's players' characters in multiplayer
+	(port/linux/game/custom_content.c; unreliable) */
+	_distributed_message_characters,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };

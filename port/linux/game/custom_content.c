@@ -26,6 +26,8 @@ Chief.
 #include "ai/actor_definitions.h"
 #include "cache/cache_files.h"
 #include "cutscene/cinematics.h"
+#include "camera/observer.h"
+#include "camera/director.h"
 #include "game/cheats.h"
 #include "game/game.h"
 #include "game/game_engine.h"
@@ -34,6 +36,7 @@ Chief.
 #include "game/players.h"
 #include "interface/ui_widget.h"
 #include "items/weapons.h"
+#include "items/weapon_definitions.h"
 #include "models/model_definitions.h"
 #include "objects/object_definitions.h"
 #include "objects/object_types.h"
@@ -44,6 +47,9 @@ Chief.
 #include "units/biped_definitions.h"
 #include "units/bipeds.h"
 #include "units/units.h"
+#include "network_distributed.h"
+
+#include <stdlib.h>
 
 /* ---------- the page's side (port/web/src/web_custom.c) */
 
@@ -67,6 +73,8 @@ enum
 	_custom_one_shot_kills = 1 << 5,
 	_custom_invincible = 1 << 6,
 	_custom_third_person = 1 << 7,
+	/* (the room host's) everyone is the Master Chief in multiplayer */
+	_custom_master_chief_only = 1 << 8,
 };
 
 enum
@@ -428,6 +436,376 @@ static void scale_head(
 
 /* ---------- public code */
 
+/* ---------- characters in multiplayer (custom_characters.c brings them in) */
+
+boolean custom_characters_available(void);
+/* players.c's */
+void placement_data_set_change_color(struct object_placement_data *placement_data, real_rgb_color const *change_color);
+void network_player_attach_unit(long player_index, long unit_index);
+void network_player_detach_unit(long player_index);
+unsigned long custom_characters_checksum(void);
+long custom_characters_biped(long character);
+
+enum
+{
+	/* how often a client tells the host its players' characters (ticks),
+	and how long the host trusts what it was told */
+	CHARACTER_REPORT_TICKS = 15,
+	CHARACTER_REPORT_LIFETIME_TICKS = 150,
+	/* how long after spawning a player may still become its character */
+	SPAWN_SWAP_TICKS = 90,
+};
+
+/* a client's players' characters, for the host (network_distributed.c) */
+struct distributed_character
+{
+	byte player_index;
+	byte character;
+	/* the client has the characters, from the level of the checksum */
+	byte available;
+	byte pad;
+	unsigned long checksum;
+};
+
+static struct
+{
+	/* the host: what each client's player asked for */
+	struct
+	{
+		long time;
+		byte character;
+		byte available;
+		unsigned long checksum;
+	} reported[MAXIMUM_TRACKED_PLAYERS];
+	/* each player's unit whose weapons were made the character's */
+	long armed_unit[MAXIMUM_TRACKED_PLAYERS];
+	/* each player's latest unit, and when it was first seen */
+	long seen_unit[MAXIMUM_TRACKED_PLAYERS];
+	long seen_time[MAXIMUM_TRACKED_PLAYERS];
+	boolean told_unavailable;
+} multiplayer_characters;
+
+static long multiplayer_unit_definition(
+	void)
+{
+	struct game_globals_multiplayer_information *information = TAG_BLOCK_GET_ELEMENT(
+		&scenario_get_game_globals()->multiplayer_information,
+		0,
+		struct game_globals_multiplayer_information);
+
+	return information->unit.index;
+}
+
+/* (network_distributed.c, the host) a client's players' characters */
+void custom_content_handle_characters(
+	long machine_index,
+	void const *entries,
+	short count)
+{
+	struct distributed_character const *characters = entries;
+	short index;
+
+	for (index = 0; index < count; index++)
+	{
+		long player_index = distributed_player_from_byte(characters[index].player_index);
+		short absolute_index = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index);
+
+		if (player_index == NONE || absolute_index < 0 || absolute_index >= MAXIMUM_TRACKED_PLAYERS ||
+			!distributed_machine_has_player(machine_index, absolute_index))
+		{
+			continue;
+		}
+		multiplayer_characters.reported[absolute_index].time = game_time_get();
+		multiplayer_characters.reported[absolute_index].character = characters[index].character;
+		multiplayer_characters.reported[absolute_index].available = characters[index].available;
+		multiplayer_characters.reported[absolute_index].checksum = characters[index].checksum;
+	}
+
+	return;
+}
+
+int custom_content_character_entry_size(
+	void)
+{
+	return sizeof(struct distributed_character);
+}
+
+/* a client: its players' characters, to the host */
+static void send_characters(
+	void)
+{
+	struct
+	{
+		struct distributed_message_header header;
+		struct distributed_character characters[MAXIMUM_LOCAL_PLAYERS];
+	} message;
+	short count = 0;
+	short local_player_index;
+
+	if (game_time_get() % CHARACTER_REPORT_TICKS)
+		return;
+	for (local_player_index = local_player_get_next(NONE);
+		local_player_index != NONE;
+		local_player_index = local_player_get_next(local_player_index))
+	{
+		struct distributed_character *character = &message.characters[count];
+
+		csmemset(character, 0, sizeof(*character));
+		character->player_index = distributed_player_to_byte(local_player_get_player_index(local_player_index));
+		character->character = (byte)web_custom_character();
+		character->available = (byte)custom_characters_available();
+		character->checksum = custom_characters_checksum();
+		count++;
+	}
+	if (count)
+	{
+		distributed_send(&message, _distributed_message_characters, count,
+			(word)(sizeof(message.header) + count * sizeof(struct distributed_character)), _distributed_to_host);
+	}
+
+	return;
+}
+
+/* the host (or a game on one machine): whether every machine's players have
+the characters, from the same level */
+static boolean everyone_has_characters(
+	void)
+{
+	short absolute_index;
+
+	if (!custom_characters_available() || (web_custom_rules() & _custom_master_chief_only))
+		return FALSE;
+	if (game_connection() == _game_connection_local)
+		return TRUE;
+	for (absolute_index = 0; absolute_index < MAXIMUM_TRACKED_PLAYERS; absolute_index++)
+	{
+		struct player_datum *player = distributed_player(absolute_index);
+
+		if (!player || player->local_player_index != NONE)
+			continue;
+		if (multiplayer_characters.reported[absolute_index].time == NONE ||
+			game_time_get() - multiplayer_characters.reported[absolute_index].time > CHARACTER_REPORT_LIFETIME_TICKS ||
+			!multiplayer_characters.reported[absolute_index].available ||
+			multiplayer_characters.reported[absolute_index].checksum != custom_characters_checksum())
+		{
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+
+/* the biped of the character a player asked for, where everyone in the game
+can have it (NONE: the Master Chief); tell says why not to this machine's
+player */
+static long multiplayer_character_biped(
+	long player_index,
+	boolean tell)
+{
+	struct player_datum *player = player_get(player_index);
+	short absolute_index = (short)DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index);
+	long character, biped;
+
+	if (player->local_player_index != NONE)
+		character = web_custom_character();
+	else if (absolute_index >= 0 && absolute_index < MAXIMUM_TRACKED_PLAYERS &&
+		multiplayer_characters.reported[absolute_index].time != NONE)
+		character = multiplayer_characters.reported[absolute_index].character;
+	else
+		character = _character_default;
+	if (character <= _character_master_chief)
+		return NONE;
+	tell = tell && player->local_player_index != NONE && !multiplayer_characters.told_unavailable;
+	if (!everyone_has_characters())
+	{
+		if (tell)
+		{
+			multiplayer_characters.told_unavailable = TRUE;
+			web_custom_message(!custom_characters_available() ?
+				"Characters in multiplayer need the full game's maps: you're the Master Chief." :
+				(web_custom_rules() & _custom_master_chief_only) ?
+				"This game is Master Chief only." :
+				"Someone in this game doesn't have the full game's maps: everyone is the Master Chief.");
+		}
+		return NONE;
+	}
+	biped = custom_characters_biped(character);
+	if (biped == NONE && tell)
+	{
+		multiplayer_characters.told_unavailable = TRUE;
+		web_custom_message("In multiplayer you can be an Elite, a Grunt, a Hunter or a Marine.");
+	}
+	return biped;
+}
+
+/* (players.c, player_spawn) the biped a player spawns as in multiplayer */
+long custom_content_multiplayer_unit(
+	long player_index,
+	long definition_index)
+{
+	long biped;
+
+	if (game_connection() == _game_connection_network_client)
+		return definition_index;
+	biped = multiplayer_character_biped(player_index, FALSE);
+	return biped != NONE ? biped : definition_index;
+}
+
+/* the host: a player's unit becomes one of the character, where it stands
+(just after it spawned: the players' choices reach the host a moment after
+the game starts) */
+static void swap_multiplayer_unit(
+	long player_index,
+	long biped)
+{
+	struct player_datum *player = player_get(player_index);
+	long old_unit_index = player->unit_index;
+	struct unit_datum *old_unit = unit_get(old_unit_index);
+	struct object_placement_data placement_data;
+	real_rgb_color change_color_storage, change_color;
+	long unit_index;
+
+	object_placement_data_new(&placement_data, biped, NONE);
+	placement_data.position = old_unit->object.position;
+	placement_data.forward = old_unit->object.forward;
+	placement_data.forward.k = 0.f;
+	if (normalize3d(&placement_data.forward) == 0.f)
+		placement_data.forward = *global_forward3d;
+	placement_data.up = *global_up3d;
+	change_color = *game_engine_player_get_change_color(&change_color_storage, player_index);
+	placement_data_set_change_color(&placement_data, &change_color);
+	unit_index = object_new(&placement_data);
+	if (unit_index == NONE)
+		return;
+	network_player_detach_unit(player_index);
+	unit_delete_all_weapons(old_unit_index);
+	object_delete(old_unit_index);
+	network_player_attach_unit(player_index, unit_index);
+
+	return;
+}
+
+/* the host: a character's unit keeps only the weapons it can hold, and has
+its own when it has none */
+static void arm_multiplayer_characters(
+	void)
+{
+	static char const *const weapons[NUMBER_OF_CHARACTERS] =
+	{
+		NULL, NULL,
+		"weapons\\assault rifle\\assault rifle",
+		"weapons\\plasma pistol\\plasma pistol",
+		NULL,
+		"weapons\\plasma rifle\\plasma rifle",
+		"weapons\\fuel rod gun\\hunter fuel rod",
+	};
+	long default_definition = multiplayer_unit_definition();
+	short absolute_index;
+
+	for (absolute_index = 0; absolute_index < MAXIMUM_TRACKED_PLAYERS; absolute_index++)
+	{
+		struct player_datum *player = distributed_player(absolute_index);
+		struct unit_datum *unit;
+		short weapon, character;
+		boolean unusable = FALSE, armed = FALSE;
+
+		if (!player || player->unit_index == NONE)
+			continue;
+		unit = unit_get(player->unit_index);
+		if (multiplayer_characters.seen_unit[absolute_index] != player->unit_index)
+		{
+			multiplayer_characters.seen_unit[absolute_index] = player->unit_index;
+			multiplayer_characters.seen_time[absolute_index] = game_time_get();
+		}
+		if (unit->definition_index == default_definition)
+		{
+			long since_spawn = game_time_get() - multiplayer_characters.seen_time[absolute_index];
+
+			if (since_spawn < SPAWN_SWAP_TICKS && unit->object.type == _object_type_biped &&
+				unit->object.parent_object_index == NONE && !TEST_FLAG(unit->object.damage_flags, _object_dead_bit))
+			{
+				long biped = multiplayer_character_biped(DATUM_INDEX_NEW(absolute_index, player->identifier), FALSE);
+
+				if (biped != NONE)
+					swap_multiplayer_unit(DATUM_INDEX_NEW(absolute_index, player->identifier), biped);
+			}
+			else if (since_spawn == SPAWN_SWAP_TICKS)
+			{
+				/* (why not, to this machine's player) */
+				multiplayer_character_biped(DATUM_INDEX_NEW(absolute_index, player->identifier), TRUE);
+			}
+			continue;
+		}
+		if (multiplayer_characters.armed_unit[absolute_index] == player->unit_index ||
+			unit->object.type != _object_type_biped)
+		{
+			continue;
+		}
+		multiplayer_characters.armed_unit[absolute_index] = player->unit_index;
+		for (weapon = 0; weapon < MAXIMUM_WEAPONS_PER_UNIT; weapon++)
+		{
+			if (unit->unit.weapon_object_indices[weapon] == NONE)
+				continue;
+			if (unit_can_use_weapon(player->unit_index, unit->unit.weapon_object_indices[weapon]))
+				armed = TRUE;
+			else
+				unusable = TRUE;
+		}
+		if (armed && !unusable)
+			continue;
+		unit_delete_all_weapons(player->unit_index);
+		for (character = _character_marine; character < NUMBER_OF_CHARACTERS; character++)
+		{
+			if (weapons[character] && custom_characters_biped(character) == unit->definition_index)
+			{
+				long definition = tag_loaded(WEAPON_DEFINITION_TAG, weapons[character]);
+				struct object_placement_data placement_data;
+				long weapon_index;
+
+				if (definition == NONE)
+					break;
+				object_placement_data_new(&placement_data, definition, player->unit_index);
+				weapon_index = object_new(&placement_data);
+				if (weapon_index != NONE &&
+					!unit_add_weapon_to_inventory(player->unit_index, weapon_index, _unit_add_weapon_replace))
+				{
+					object_delete(weapon_index);
+				}
+				break;
+			}
+		}
+	}
+
+	return;
+}
+
+/* the page's status line: whether this machine's first player plays the
+character it asked for */
+static void report_multiplayer_character(
+	void)
+{
+	short local_player_index = local_player_get_next(NONE);
+	long unit_index = local_player_index != NONE ? player_control_get_unit_index(local_player_index) : NONE;
+	long character = web_custom_character();
+	long biped = custom_characters_biped(character);
+
+	web_custom_set_character_status(unit_index != NONE && biped != NONE && unit_get(unit_index)->definition_index == biped ?
+		_character_status_playing : _character_status_none);
+}
+
+static void update_multiplayer_characters(
+	void)
+{
+	report_multiplayer_character();
+	if (!game_engine_running() || main_menu_is_active())
+		return;
+	if (game_connection() == _game_connection_network_client)
+		send_characters();
+	else if (custom_characters_available())
+		arm_multiplayer_characters();
+
+	return;
+}
+
 void custom_content_new_map(
 	void)
 {
@@ -436,6 +814,17 @@ void custom_content_new_map(
 	custom_globals.reported_character = NONE;
 	custom_globals.status = NONE;
 	custom_globals.swapped = FALSE;
+	{
+		short index;
+
+		for (index = 0; index < MAXIMUM_TRACKED_PLAYERS; index++)
+		{
+			multiplayer_characters.reported[index].time = NONE;
+			multiplayer_characters.armed_unit[index] = NONE;
+			multiplayer_characters.seen_unit[index] = NONE;
+		}
+		multiplayer_characters.told_unavailable = FALSE;
+	}
 
 	return;
 }
@@ -477,7 +866,10 @@ void custom_content_update(
 	custom_globals.applied_rules = rules;
 
 	if (game_in_progress())
+	{
 		update_character();
+		update_multiplayer_characters();
+	}
 
 	/* captures: a slower game, sped up afterwards */
 	if (web_custom_game_speed() > 0 && game_in_progress() && !main_menu_is_active() &&
@@ -523,6 +915,15 @@ void custom_content_update(
 			top_speed = MAX(top_speed, speed);
 			if ((++frame % 60) == 0)
 			{
+				{
+					/* where the camera is, from the unit */
+					struct observer_result const *camera = observer_get_camera(local_player_index);
+
+					platform_log("custom content: %s at (%.2f %.2f %.2f), camera (%.2f %.2f %.2f), perspective %d",
+						tag_get_name(unit->definition_index), unit->object.position.x, unit->object.position.y,
+						unit->object.position.z, camera->position.x, camera->position.y, camera->position.z,
+						(int)director_get_perspective(local_player_index));
+				}
 				if (top_speed > 0.f)
 					platform_log("custom content: %s top speed %.4f", tag_get_name(unit->definition_index), top_speed);
 				top_speed = 0.f;
@@ -546,6 +947,30 @@ void custom_content_postprocess_unit(
 	if (web_custom_rules() & _custom_big_heads)
 		scale_head(unit_index, node_matrices);
 
+	return;
+}
+
+/* (following_camera.c) how far and how high the camera follows a unit
+from, relative to its track: the Elite's is set too high for it */
+void custom_content_camera_adjust(
+	long unit_index,
+	real *distance_scale,
+	real *height)
+{
+	struct unit_datum *unit;
+
+	*distance_scale = 1.f;
+	*height = 0.f;
+	if (unit_index == NONE)
+		return;
+	unit = unit_get(unit_index);
+	if (unit->object.type == _object_type_biped && unit->object.parent_object_index == NONE &&
+		(string_ends_with(tag_get_name(unit->definition_index), "\\elite\\elite") ||
+			string_ends_with(tag_get_name(unit->definition_index), "\\elite special")))
+	{
+		*distance_scale = 1.1f;
+		*height = -0.7f;
+	}
 	return;
 }
 
@@ -573,7 +998,19 @@ boolean custom_content_third_person(
 		return unit->definition_index != player_information->player_unit.index;
 	}
 
-	return FALSE;
+	/* a character brought into multiplayer */
+	if (web_custom_debug())
+	{
+		static long logged_unit = NONE;
+
+		if (logged_unit != unit_index)
+		{
+			logged_unit = unit_index;
+			platform_log("custom content: camera for %s (multiplayer unit %s)", tag_get_name(unit->definition_index),
+				tag_get_name(multiplayer_unit_definition()));
+		}
+	}
+	return unit->definition_index != multiplayer_unit_definition();
 }
 
 #endif

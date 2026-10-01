@@ -245,9 +245,14 @@
       <label class="row"><input type="checkbox" data-rule="8"> Super jump</label>
       <label class="row"><input type="checkbox" data-rule="16"> Big heads</label>
       <label class="row"><input type="checkbox" data-rule="32"> One-shot kills</label>
+      <label class="row"><input type="checkbox" data-rule="64"> Invincible (campaign)</label>
+      <label class="row"><input type="checkbox" data-rule="256"> Chief only (MP)</label>
     </div>
-    <h3>Campaign</h3>
-    <label class="row">Play as
+    <h3>Play as</h3>
+    <p class="small">In the campaign, any character the level has. In multiplayer, an Elite, a Grunt, a Hunter or a
+      Marine, from your next spawn: everyone in the game needs a full copy of the game (it brings them in from The
+      Silent Cartographer).</p>
+    <label class="row">Character
       <select id="custom-character">
         <option value="0">Master Chief (as the level has it)</option>
         <option value="2">Marine</option>
@@ -263,11 +268,10 @@
         <option value="12">Captain Keyes</option>
       </select></label>
     <p class="small" id="custom-character-status"></p>
-    <p class="small">You become that character where you stand, with its own weapon, and the camera follows from
+    <p class="small">In the campaign you become that character where you stand, with its own weapon; the camera follows from
       behind. A level only has the characters it uses (no Flood before 343 Guilty Spark, for example); where the
       character is missing you stay the Master Chief. Covenant and Flood have no HUD. Experimental: some
       cutscenes may look odd.</p>
-    <label class="row"><input type="checkbox" data-rule="64"> Invincible</label>
     <h3>Camera</h3>
     <label class="row"><input type="checkbox" data-rule="128"> Third-person camera (just for you)</label>
   </div>

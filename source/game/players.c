@@ -1340,6 +1340,14 @@ static void player_spawn(
 						0,
 						struct game_globals_multiplayer_information);
 					unit_definition_index = multiplayer_information->unit.index;
+#ifdef HALO_WEB
+					/* port: a character the player asked for (custom_content.c) */
+					{
+						extern long custom_content_multiplayer_unit(long player_index, long definition_index);
+
+						unit_definition_index = custom_content_multiplayer_unit(player_index, unit_definition_index);
+					}
+#endif
 				}
 				else
 				{

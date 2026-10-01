@@ -1717,6 +1717,15 @@ void network_distributed_handle_message(
 	case _distributed_message_client_ready: entry_size = 0; break;
 	case _distributed_message_damage_events:
 	case _distributed_message_hit_reports: entry_size = network_damage_entry_size(header.type); break;
+#ifdef HALO_WEB
+	case _distributed_message_characters:
+	{
+		extern int custom_content_character_entry_size(void);
+
+		entry_size = (word)custom_content_character_entry_size();
+		break;
+	}
+#endif
 	default: entry_size = network_objects_entry_size(header.type); break;
 	}
 	if (header.type == 0 || header.type >= NUMBER_OF_DISTRIBUTED_MESSAGES ||
@@ -1734,6 +1743,7 @@ void network_distributed_handle_message(
 	case _distributed_message_hit_reports:
 	case _distributed_message_vehicle_prediction:
 	case _distributed_message_player_inputs:
+	case _distributed_message_characters:
 		if (machine_index == NONE || game_connection() != _game_connection_network_server)
 			return;
 		break;
@@ -1808,6 +1818,15 @@ void network_distributed_handle_message(
 	case _distributed_message_relayed_actions:
 		distributed_handle_actions((struct distributed_relayed_action const *)entries, header.count);
 		break;
+#ifdef HALO_WEB
+	case _distributed_message_characters:
+	{
+		extern void custom_content_handle_characters(long machine_index, void const *entries, short count);
+
+		custom_content_handle_characters(machine_index, entries, header.count);
+		break;
+	}
+#endif
 	case _distributed_message_pickups:
 	{
 		/* what the host says this machine's players picked up */

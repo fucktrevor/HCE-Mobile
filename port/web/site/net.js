@@ -34,7 +34,7 @@ const HaloNet = (() => {
   const HELLO_INTERVAL = 3000;
   // the game rules a room's host sets for everyone (web_shared.h WEB_CUSTOM_*:
   // not invincibility or the camera, which are each player's own)
-  const RULES_MASK = 0x3f;
+  const RULES_MASK = 0x13f;
   const PEER_TIMEOUT = 20000;
   const PACKET_HEADER = 24;
   const KIND = { DATAGRAM: 1, OPEN: 2, DATA: 3, CLOSE: 4, REFUSE: 5 };
