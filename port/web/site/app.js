@@ -41,10 +41,19 @@ can run the game, copies the game data out of the player's disc image
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
   const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: false, silentSound: true,
-    touchCustom: {}, touchOpacity: 1, customRules: 0, customCharacter: 0 };
+    touchCustom: {}, touchOpacity: 1, customRules: 0, customCharacter: 0, smallTextures: false };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
+  // Smaller textures: on by itself where the graphics take no S3TC (most
+  // Android phones: the game's textures are decoded, and big), unless chosen
+  if (!settings.smallTexturesChosen) {
+    try {
+      const gl = document.createElement('canvas').getContext('webgl2');
+      settings.smallTextures = !!gl && !gl.getExtension('WEBGL_compressed_texture_s3tc');
+      gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch { /* the default */ }
+  }
 
   function saveSettings() {
     try { localStorage.setItem('halo-web-settings', JSON.stringify(settings)); } catch { /* not kept */ }
@@ -991,6 +1000,7 @@ can run the game, copies the game data out of the player's disc image
     log('playing ' + (game ? `${game.name} (${game.dataRoot})` : 'nothing'));
     if (!settings.vsync) argumentsList.push('--HALO_NO_VSYNC=1');
     if (settings.glDebug) argumentsList.push('--HALO_GL_DEBUG=1');
+    if (settings.smallTextures) argumentsList.push('--HALO_WEB_SMALL_TEXTURES=1');
     // the frame rate view also counts the WebGL calls and their time
     if (settings.showTiming) argumentsList.push('--HALO_WEB_GL_STATS=1');
 
@@ -1019,6 +1029,13 @@ can run the game, copies the game data out of the player's disc image
         else if (kind === 4) log('thread error: ' + text);
         else if (kind === 6) state.timing = text;
         else if (kind === 7) state.glTiming = text;
+        else if (kind === 3 && /graphics context was lost/.test(text)) {
+          // next time, textures that need less graphics memory
+          settings.smallTextures = true;
+          settings.smallTexturesChosen = true;
+          saveSettings();
+          fatal(text);
+        }
         else if (kind === 5) {
           log('game: ' + text);
           $('fatal').querySelector('h2').textContent = 'The game quit';
@@ -1710,6 +1727,12 @@ can run the game, copies the game data out of the player's disc image
     $('opt-fps').onchange = (event) => { settings.showTiming = event.target.checked; saveSettings(); };
     $('opt-silent').checked = settings.silentSound;
     $('opt-silent').onchange = (event) => { settings.silentSound = event.target.checked; saveSettings(); };
+    $('opt-small-textures').checked = settings.smallTextures;
+    $('opt-small-textures').onchange = (event) => {
+      settings.smallTextures = event.target.checked;
+      settings.smallTexturesChosen = true;
+      saveSettings();
+    };
     $('opt-gldebug').checked = settings.glDebug;
     $('opt-gldebug').onchange = (event) => { settings.glDebug = event.target.checked; saveSettings(); };
     $('iso-file').onchange = onImageChosen;

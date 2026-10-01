@@ -572,6 +572,39 @@ static void texture_dump(GLenum target, const struct xgpu_texture_description *d
 }
 #endif
 
+#ifdef HALO_WEB
+/* Phones whose browsers take no S3TC (most Android GPUs) get the game's
+compressed textures decoded, four to eight times their size: a campaign
+level's can outgrow the graphics memory the browser allows a page, and the
+context is lost. There, decoded DXT1 textures (no smooth alpha) are 16 bits
+a texel, as their colors were, and HALO_WEB_SMALL_TEXTURES (the page's
+"Smaller textures", on by itself after a lost context) also leaves out the
+largest level of big ones. */
+static BOOL small_textures(void)
+{
+	static int small = -1;
+
+	if (small < 0)
+		small = getenv("HALO_WEB_SMALL_TEXTURES") && atoi(getenv("HALO_WEB_SMALL_TEXTURES")) ? 1 : 0;
+	return small;
+}
+
+/* RGBA texels (bytes R, G, B, A) to 5551 shorts, in place */
+static void pack_5551(unsigned long *texels, unsigned long count)
+{
+	unsigned short *packed = (unsigned short *)texels;
+	unsigned long texel;
+
+	for (texel = 0; texel < count; texel++)
+	{
+		unsigned long value = texels[texel];
+
+		packed[texel] = (unsigned short)((((value >> 3) & 0x1f) << 11) | (((value >> 11) & 0x1f) << 6) |
+			(((value >> 19) & 0x1f) << 1) | ((value >> 31) & 1));
+	}
+}
+#endif
+
 static void upload(GLuint texture, GLenum target, const struct xgpu_texture_description *description,
 	const unsigned char *base, const D3DCOLOR *palette)
 {
@@ -582,6 +615,7 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 	BOOL decode_compressed = FALSE;
 	unsigned long *converted;
 	unsigned long face, level;
+	unsigned long first_level = 0;
 
 #ifdef HALO_ANDROID
 	decode_compressed = description->compressed && !xgpu_capabilities.s3tc;
@@ -593,6 +627,22 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 		decode_compressed = TRUE;
 #endif
 	converted = description->compressed && !decode_compressed ? NULL : malloc(largest * sizeof(unsigned long));
+#ifdef HALO_WEB
+	/* (big compressed textures drawn without S3TC: from their second level) */
+	{
+		unsigned long skip = 0;
+
+		if (decode_compressed && !xgpu_capabilities.s3tc && small_textures() && target == GL_TEXTURE_2D)
+		{
+			while (skip + 1 < description->levels &&
+				(level_dimension(description->width, skip) > 256 || level_dimension(description->height, skip) > 256))
+			{
+				skip++;
+			}
+		}
+		first_level = skip;
+	}
+#endif
 	glBindTexture(target, texture);
 	xgpu_gl_state_invalidate();
 #if defined(HALO_ANDROID) && !defined(HALO_WEB)
@@ -603,17 +653,18 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 #endif
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTexParameteri(target, GL_TEXTURE_BASE_LEVEL, 0);
-	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, (GLint)description->levels - 1);
+	glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, (GLint)(description->levels - 1 - first_level));
 	for (face = 0; face < face_count; face++)
 	{
 		GLenum image_target = description->cube_map ? GL_TEXTURE_CUBE_MAP_POSITIVE_X + face : target;
 
-		for (level = 0; level < description->levels; level++)
+		for (level = first_level; level < description->levels; level++)
 		{
 			const unsigned char *source = base + face * face_size + xgpu_texture_level_offset(description, level);
 			GLsizei width = (GLsizei)level_dimension(description->width, level);
 			GLsizei height = (GLsizei)level_dimension(description->height, level);
 			GLsizei depth = (GLsizei)level_dimension(description->depth, level);
+			GLint gl_level = (GLint)(level - first_level);
 
 			if (description->compressed && !decode_compressed)
 			{
@@ -646,10 +697,21 @@ static void upload(GLuint texture, GLenum target, const struct xgpu_texture_desc
 					}
 				}
 #endif
+#ifdef HALO_WEB
+				if (decode_compressed && !xgpu_capabilities.s3tc && information.kind == _texel_dxt1)
+				{
+					pack_5551(converted, (unsigned long)width * (unsigned long)height * (unsigned long)depth);
+					if (target == GL_TEXTURE_3D)
+						glTexImage3D(image_target, gl_level, GL_RGB5_A1, width, height, depth, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, converted);
+					else
+						glTexImage2D(image_target, gl_level, GL_RGB5_A1, width, height, 0, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, converted);
+					continue;
+				}
+#endif
 				if (target == GL_TEXTURE_3D)
-					glTexImage3D(image_target, (GLint)level, GL_RGBA8, width, height, depth, 0, GL_BGRA, GL_UNSIGNED_BYTE, converted);
+					glTexImage3D(image_target, gl_level, GL_RGBA8, width, height, depth, 0, GL_BGRA, GL_UNSIGNED_BYTE, converted);
 				else
-					glTexImage2D(image_target, (GLint)level, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, converted);
+					glTexImage2D(image_target, gl_level, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, converted);
 			}
 		}
 	}

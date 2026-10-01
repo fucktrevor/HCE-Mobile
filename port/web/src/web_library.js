@@ -54,6 +54,53 @@ addToLibrary({
         };
       }
     },
+    // HALO_GL_DEBUG: each WebGL call that fails, by name, with its
+    // arguments (the first few times for each call and error)
+    traceErrors(context) {
+      var seen = {};
+      var getError = context.getError.bind(context);
+      var describe = (value) => {
+        if (value === null || value === undefined) return String(value);
+        if (typeof value == 'number') return value > 0x1000 && value < 0x10000 ? '0x' + value.toString(16) : String(value);
+        if (typeof value == 'boolean' || typeof value == 'string') return String(value).slice(0, 40);
+        if (ArrayBuffer.isView(value)) return value.constructor.name + '[' + value.length + ']';
+        return Object.prototype.toString.call(value).slice(8, -1);
+      };
+      for (let name in context) {
+        let method = context[name];
+        if (typeof method != 'function' || name == 'getError') continue;
+        context[name] = function () {
+          var result = method.apply(context, arguments);
+          var error = getError();
+          if (error) {
+            var key = name + error;
+            seen[key] = (seen[key] || 0) + 1;
+            if (seen[key] <= 3 || seen[key] == 100 || seen[key] == 1000) {
+              var args = Array.prototype.map.call(arguments, describe).join(', ');
+              var binding = '';
+              try {
+                if (/^(draw|clear|blit|copyTex|readPixels|framebuffer)/.test(name)) {
+                  var fb = context.getParameter(context.DRAW_FRAMEBUFFER_BINDING);
+                  binding = ' framebuffer ' + (fb ? 'bound, status 0x' + context.checkFramebufferStatus(context.DRAW_FRAMEBUFFER).toString(16) : 'default');
+                }
+              } catch (e) { /* none */ }
+              webHalo.post('haloMessage', [0, `GL error 0x${error.toString(16)} in ${name}(${args})${binding} (${seen[key]} times)`]);
+            }
+          }
+          return result;
+        };
+      }
+    },
+    // the browser took the graphics away (most often: the page used more
+    // graphics memory than it allows): the page says so, and next time the
+    // game asks for smaller textures (app.js)
+    lostReported: false,
+    contextLost() {
+      if (webHalo.lostReported) return;
+      webHalo.lostReported = true;
+      webHalo.post('haloMessage', [3, 'The graphics context was lost: the browser stopped the game\'s graphics, most often because they ' +
+        'needed more memory than it allows. Reload to continue: the game now uses smaller textures (Settings and data).']);
+    },
     reportCalls() {
       if (++webHalo.frames % 60) return;
       var calls = webHalo.calls, time = webHalo.callTime, total = 0, totalTime = 0;
@@ -89,12 +136,15 @@ addToLibrary({
       webHalo.post('haloMessage', [3, 'WebGL 2 is not available.']);
       return 0;
     }
-    canvas.addEventListener?.('webglcontextlost', (event) => {
-      event.preventDefault();
-      webHalo.post('haloMessage', [3, 'The graphics context was lost. Reload the page to continue.']);
-    });
+    // (an OffscreenCanvas's event is 'contextlost'; the game's thread never
+    // returns to its event loop, so each frame also asks: web_js_gl_present)
+    for (var lost of ['contextlost', 'webglcontextlost']) {
+      canvas.addEventListener?.(lost, (event) => { event.preventDefault(); webHalo.contextLost(); });
+    }
     webHalo.canvas = canvas;
-    if (statistics) webHalo.countCalls(context);
+    webHalo.context = context;
+    if (statistics & 1) webHalo.countCalls(context);
+    if (statistics & 2) webHalo.traceErrors(context);
     var handle = GL.registerContext(context, Object.assign({
       majorVersion: 2,
       minorVersion: 0,
@@ -117,6 +167,7 @@ addToLibrary({
   web_js_gl_present: () => {
     var canvas = webHalo.canvas;
     if (!canvas) return;
+    if (webHalo.context && !webHalo.lostReported && webHalo.context.isContextLost()) webHalo.contextLost();
     if (webHalo.calls) webHalo.reportCalls();
     var bitmap = canvas.transferToImageBitmap();
     webHalo.post('haloPresent', [bitmap], [bitmap]);

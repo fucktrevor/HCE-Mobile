@@ -281,7 +281,11 @@ SDL_GLContext SDL_GL_CreateContext(SDL_Window *window)
 	if (!gl_context)
 	{
 		display_size(&canvas_width, &canvas_height);
-		gl_context = web_js_gl_create(canvas_width, canvas_height, getenv("HALO_WEB_GL_STATS") != NULL);
+		/* 1: count the WebGL calls (HALO_WEB_GL_STATS); 2: name each call
+		that fails (debug.gl_debug, "Log graphics errors") */
+		gl_context = web_js_gl_create(canvas_width, canvas_height,
+			(getenv("HALO_WEB_GL_STATS") != NULL ? 1 : 0) |
+			(getenv("HALO_GL_DEBUG") && atoi(getenv("HALO_GL_DEBUG")) ? 2 : 0));
 		if (!gl_context)
 		{
 			set_error("WebGL 2 is not available");
