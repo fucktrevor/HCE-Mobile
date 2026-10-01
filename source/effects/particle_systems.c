@@ -1486,6 +1486,18 @@ static void particle_system_render(
 						sequence_index,
 						struct bitmap_group_sequence);
 
+#ifdef HALO_WEB
+					/* port: a sequence without sprites (the characters brought
+					into multiplayer have some) would divide by zero, and has
+					nothing to draw */
+					if (sequence->sprites.count <= 0)
+					{
+						sprite_index = 0;
+						state_weight = 0.0f;
+						transition_weight = 0.0f;
+					}
+					else
+#endif
 					if (particle->sprite_index == -1.0f)
 					{
 						particle->sprite_index = (real)local_random_range(

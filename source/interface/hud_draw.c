@@ -1203,6 +1203,10 @@ void hud_draw_weapon_overlays(
 
 			if (TEST_FLAG(item->flags, _hud_overlay_flashes_bit) &&
 				TEST_FLAG(draw_flags, _hud_draw_flashing_bit) &&
+#ifdef HALO_WEB
+				/* port: (a sequence without sprites would divide by zero) */
+				sequence->sprites.count > 0 &&
+#endif
 				item->frame_rate > 0)
 			{
 				frame_index = (short)(((game_time_get() - reference_time) /

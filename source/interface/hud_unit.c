@@ -1245,6 +1245,12 @@ void hud_render_unit_interface(
 								auxilary_values[meter->type] <=
 									meter->panel.aux_extras.min_cutoff);
 							hud_state->auxilary_flash_time[meter->type] += game_time_get_elapsed();
+#ifdef HALO_WEB
+							/* port: a meter that does not flash (a flash period of
+							0, as the HUDs of the characters brought into
+							multiplayer have) would divide by zero */
+							if (get_flash_duration(&meter->panel.background.colors) > 0)
+#endif
 							hud_state->auxilary_flash_time[meter->type] %= 2 * get_flash_duration(
 								&meter->panel.background.colors);
 

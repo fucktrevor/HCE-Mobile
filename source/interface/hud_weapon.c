@@ -1162,7 +1162,13 @@ static void crosshairs_draw(
 								case _crosshair_state_flash_secondary_ammo_none_for_reload:
 								case _crosshair_state_primary_trigger_ready:
 								case _crosshair_state_secondary_trigger_ready:
-									if (item->frame_rate > 0)
+									if (item->frame_rate > 0
+#ifdef HALO_WEB
+										/* port: (a sequence without sprites would
+										divide by zero) */
+										&& sequence->sprites.count > 0
+#endif
+										)
 									{
 										frame_index = (short)(((game_time_get() - state->value.reference_data) /
 											item->frame_rate / TICKS_PER_SECOND) % sequence->sprites.count);
