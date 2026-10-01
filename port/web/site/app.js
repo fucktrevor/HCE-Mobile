@@ -52,11 +52,27 @@ can run the game, copies the game data out of the player's disc image
 
   // ---------- log
 
+  // The page's log is also kept in this browser's storage as it grows, so
+  // that when the tab dies (a phone closing it for memory, a hang and a
+  // reload) the next visit's log still has what led up to it.
+  const SESSION_LOG_KEY = 'halo-web-last-session';
+  try {
+    state.previousLog = localStorage.getItem(SESSION_LOG_KEY) || '';
+  } catch { /* none */ }
+
+  function saveSessionLog() {
+    state.logSaveTimer = null;
+    try {
+      localStorage.setItem(SESSION_LOG_KEY, `${new Date().toISOString()} ${navigator.userAgent}\n` + state.log.slice(-400).join('\n'));
+    } catch { /* not kept */ }
+  }
+
   function log(line) {
     const text = String(line);
     state.log.push(text);
     if (state.log.length > 2000) state.log.splice(0, state.log.length - 2000);
     console.log(text);
+    if (!state.logSaveTimer) state.logSaveTimer = setTimeout(saveSessionLog, 1000);
   }
 
   async function debugText() {
@@ -73,6 +89,7 @@ can run the game, copies the game data out of the player's disc image
   async function fullLog() {
     const debug = await debugText();
     return `${navigator.userAgent}\n\n--- page and console ---\n${state.log.join('\n')}` +
+      (state.previousLog ? `\n\n--- the session before this one ---\n${state.previousLog}` : '') +
       (debug ? `\n\n--- debug.txt ---\n${debug}` : '');
   }
 
@@ -629,6 +646,9 @@ can run the game, copies the game data out of the player's disc image
       location.reload();
     };
     $('menu-quit').onclick = () => location.reload();
+    $('menu-copy-log').onclick = async () => {
+      try { await navigator.clipboard.writeText(await fullLog()); toast('The log is copied.'); } catch { toast('Could not copy the log.'); }
+    };
   }
 
   // ---------- the start page's background: a frame of the player's own
@@ -1037,6 +1057,16 @@ can run the game, copies the game data out of the player's disc image
         if (settings.showTiming) showFrameRate();
         startAudio();
         log('runtime ready');
+        // every ten seconds, how the game is doing (in the log kept across a
+        // crash: a game that stopped drawing shows as frames that stopped)
+        let lastPresented = 0;
+        setInterval(() => {
+          const i32 = new Int32Array(state.memory.buffer);
+          const game = Atomics.load(i32, sharedWord('framesPresented'));
+          log(`heartbeat: ${game - lastPresented} frames from the game in 10 s (${state.presented || 0} shown)` +
+            (document.hidden ? ', page hidden' : '') + (state.timing ? ` · ${state.timing}` : ''));
+          lastPresented = game;
+        }, 10000);
       },
     };
 
