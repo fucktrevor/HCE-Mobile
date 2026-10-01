@@ -287,8 +287,9 @@ With the campaign in the copy of the game, the multiplayer map list ends with
 *Cartographer*: The Silent Cartographer's island as a multiplayer map, for
 split screen and System Link (`port/linux/game/custom_characters.c`, with
 `HALO_WEB` hooks in the map list, `interface/ui_widget_event_handler_functions.c`,
-and its text, `text/text_group.c`). As the level loads for a multiplayer
-game:
+and its text, `text/text_group.c`), shown with the campaign's picture of the
+level (it takes the place of the question mark the list has for a map it
+doesn't know). As the level loads for a multiplayer game:
 
 - Blood Gulch lends it what multiplayer needs and a campaign level has not,
   the same way the characters are brought in: the multiplayer globals (flag,

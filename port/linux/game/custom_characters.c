@@ -39,6 +39,7 @@ do not speak, and multiplayer has no AI.
 #include "scenario/scenario_definitions.h"
 #include "hs/hs_scenario_definitions.h"
 #include "units/unit_definitions.h"
+#include "bitmaps/bitmap_group.h"
 #include "objects/objects.h"
 #include "units/units.h"
 #include "models/model_animation_definitions.h"
@@ -994,6 +995,10 @@ unit definition's seats are) */
 #define ARENA_VEHICLE_SIZE 0x78
 #define ARENA_PALETTE_ENTRY_SIZE 0x30
 #define ARENA_PELICAN_REACH 5.f
+/* the campaign's picture of b30 (a10, a30, a50, b30, ...) and the multiplayer
+list's question mark */
+#define ARENA_CAMPAIGN_PICTURE 3
+#define ARENA_MULTIPLAYER_PICTURE 13
 typedef char arena_unit_seat_size_assert[sizeof(struct unit_seat) == 0x11C ? 1 : -1];
 
 static boolean arena_root(struct donor_tag *tag)
@@ -1432,6 +1437,31 @@ static boolean import_tags(struct cache_tag_header *header, struct tag_import co
 	return ok && custom_characters.imports[slot].file != INVALID_HANDLE_VALUE;
 }
 
+/* the multiplayer map list's picture for a map it doesn't know (its last,
+a question mark) becomes the campaign's picture of The Silent Cartographer:
+the two are pictures of the same size in the menus' map, so the campaign
+one's description takes the question mark's place */
+static void arena_preview(
+	struct cache_tag_header *header)
+{
+	long campaign = arena_tag(header, TAG('b', 'i', 't', 'm'), "ui\\shell\\bitmaps\\sp_levels");
+	long multiplayer = arena_tag(header, TAG('b', 'i', 't', 'm'), "ui\\shell\\bitmaps\\mp_map_grafix");
+
+	if (campaign != NONE && multiplayer != NONE)
+	{
+		struct bitmap_group *from = (struct bitmap_group *)header->tag_instances[campaign].base_address;
+		struct bitmap_group *to = (struct bitmap_group *)header->tag_instances[multiplayer].base_address;
+		struct bitmap_data *picture = (struct bitmap_data *)from->bitmaps.address + ARENA_CAMPAIGN_PICTURE;
+		struct bitmap_data *unknown = (struct bitmap_data *)to->bitmaps.address + ARENA_MULTIPLAYER_PICTURE;
+
+		if (from->bitmaps.count > ARENA_CAMPAIGN_PICTURE && to->bitmaps.count == ARENA_MULTIPLAYER_PICTURE + 1 &&
+			picture->width == unknown->width && picture->height == unknown->height && picture->format == unknown->format)
+		{
+			*unknown = *picture;
+		}
+	}
+}
+
 /* (cache_files.c, scenario_tags_load) a map's tags are loaded */
 void custom_characters_tags_loaded(
 	void *tag_header,
@@ -1452,6 +1482,8 @@ void custom_characters_tags_loaded(
 	for (slot = 0; slot < NUMBER_OF_IMPORTS; slot++)
 		custom_characters.imports[slot].first_new_index = custom_characters.imports[slot].end_new_index = NONE;
 	platform_log("custom characters: map %s", map_name ? map_name : "(none)");
+	if (map_name && !_stricmp(map_name, "ui"))
+		arena_preview(header);
 	if (!map_name || !map_name[0] || !_stricmp(map_name, "ui"))
 		return;
 	/* The Silent Cartographer in a multiplayer game: an arena, with the
