@@ -241,6 +241,13 @@ static void display_size(int *width, int *height)
 	*height = h;
 }
 
+/* the page's canvas, in pixels: its height over 480 is how many pixels the
+game draws per line (Settings, Resolution; d3d8_gl.c screen_mode_choose) */
+void web_display_size(int *width, int *height)
+{
+	display_size(width, height);
+}
+
 SDL_Window *SDL_CreateWindow(const char *title, int width, int height, SDL_WindowFlags flags)
 {
 	(void)title;

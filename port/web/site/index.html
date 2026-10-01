@@ -170,6 +170,16 @@
       <label class="row"><input type="checkbox" id="opt-silent" checked> Sound when the phone is on silent (pauses music from other apps)</label>
       <label class="row"><input type="checkbox" id="opt-vsync" checked> Wait for the display (smoother, saves battery)</label>
       <label class="row"><input type="checkbox" id="opt-fps"> Show the frame rate</label>
+      <label class="row">Resolution
+        <select id="opt-resolution">
+          <option value="auto">Automatic (phones 480, computers up to 1080)</option>
+          <option value="480">480 lines (the Xbox's; fastest)</option>
+          <option value="720">720 lines</option>
+          <option value="1080">1080 lines</option>
+          <option value="1440">1440 lines</option>
+          <option value="native">The screen's own</option>
+        </select></label>
+      <label class="row"><input type="checkbox" id="opt-sharp-textures"> Sharper textures at an angle (from the next start)</label>
       <label class="row"><input type="checkbox" id="opt-small-textures"> Smaller textures (for phones where a level goes black
         or the game stops: less graphics memory, a little blurrier)</label>
       <label class="row"><input type="checkbox" id="opt-gldebug"> Log graphics errors (for bug reports; slower)</label>
@@ -290,6 +300,15 @@
     <p class="small" id="menu-coop-status" hidden></p>
     <label class="row"><input type="checkbox" id="menu-silent"> Sound when the phone is on silent</label>
     <label class="row"><input type="checkbox" id="menu-fps"> Show the frame rate</label>
+    <label class="row">Resolution
+      <select id="menu-resolution">
+          <option value="auto">Automatic (phones 480, computers up to 1080)</option>
+          <option value="480">480 lines (the Xbox's; fastest)</option>
+          <option value="720">720 lines</option>
+          <option value="1080">1080 lines</option>
+          <option value="1440">1440 lines</option>
+          <option value="native">The screen's own</option>
+      </select></label>
     <label class="row" id="menu-game-row">Game
       <select id="menu-game"></select>
       <button type="button" class="button small-button" id="menu-switch-game">Restart with it</button></label>

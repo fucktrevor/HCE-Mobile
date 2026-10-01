@@ -135,6 +135,21 @@ without use: install the app to keep it.
 - A keyboard and mouse (iPad or computer): as on Linux. Click the game to lock
   the pointer; Esc releases it.
 
+## Resolution
+
+The game lays itself out in 480 lines, the Xbox's, at the shape of the screen.
+*Settings and data* > *Resolution* picks how many pixels it draws them with:
+*Automatic* keeps 480 on phones and tablets (every frame goes from the game's
+thread to the page, and their graphics memory is small) and on computers and
+Macs uses the screen's own resolution, Retina included, up to 1080 lines. 720,
+1080, 1440 and the screen's own can be chosen anywhere, also from the in-game
+menu, and take effect at the next frame. More lines than the screen has
+smooth the edges, as supersampling does.
+
+*Sharper textures at an angle*, on by default on computers, adds 16x
+anisotropic filtering (or as much as the graphics allow), so floors and walls
+seen at an angle stay sharp. It takes effect at the next start.
+
 ## Sound
 
 iOS plays a page's Web Audio through the ringer: with the phone on silent,
@@ -391,9 +406,7 @@ the game only when it is there.
   have no UDP.
 - Bink video is not available. The game skips the movies.
 - Lens flares show through walls (see "WebGL 2").
-- Performance depends on the device. The game draws 480 lines at the shape of
-  the screen; the page scales them up, so each frame that goes from the game's
-  thread to the page is 480 lines too.
+- Performance depends on the device. See "Resolution".
 
 ## Find problems
 

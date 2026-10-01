@@ -73,6 +73,9 @@ still works in its 480 lines. The width and the scale change only between
 frames, after one is presented (halo_screen_commit). */
 
 #define SCREEN_HEIGHT 480
+#ifdef HALO_WEB
+void web_display_size(int *width, int *height); /* port/web/src/web_sdl.c */
+#endif
 #define SCREEN_MAXIMUM_WIDTH 1920
 
 /* the width the game draws, 0 until first asked, and how many pixels a
@@ -99,6 +102,22 @@ static void screen_mode_choose(long *width, float scale[2])
 	*width &= ~1L;
 	scale[0] = scale[1] = 1.0f;
 #ifdef HALO_WEB
+	{
+		/* the page's canvas has as many lines as Settings, Resolution asks
+		for (480 on phones): the screen's targets are drawn at that many
+		pixels a game pixel, and a change takes effect between frames. The
+		width the game draws stays the one it started with. */
+		int display_width, display_height;
+
+		web_display_size(&display_width, &display_height);
+		if (display_height > SCREEN_HEIGHT)
+		{
+			scale[1] = (float)display_height / (float)SCREEN_HEIGHT;
+			scale[0] = (float)display_width / (float)*width;
+			if (scale[0] < 1.0f)
+				scale[0] = 1.0f;
+		}
+	}
 	/* HALO_WEB_RENDER_SCALE: targets drawn at that many pixels a game pixel
 	(for captures of the start page's art; the page makes its canvas match) */
 	if (getenv("HALO_WEB_RENDER_SCALE") && atof(getenv("HALO_WEB_RENDER_SCALE")) > 1.0)
@@ -2041,6 +2060,33 @@ static GLenum address_mode(DWORD mode)
 	}
 }
 
+#ifdef HALO_WEB
+/* HALO_WEB_ANISOTROPY: the least anisotropic filtering, up to what the
+graphics allow; 1 (none) unless the page asks */
+static float web_anisotropy(void)
+{
+	static float anisotropy = -1.0f;
+
+	if (anisotropy < 0.0f)
+	{
+		const char *asked = getenv("HALO_WEB_ANISOTROPY");
+		GLfloat most = 1.0f;
+
+		anisotropy = asked ? (float)atof(asked) : 1.0f;
+		if (anisotropy > 1.0f)
+		{
+			glGetFloatv(0x84FF /* GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT */, &most);
+			if (anisotropy > most)
+				anisotropy = most;
+			platform_log("anisotropic filtering %.0fx (the graphics allow %.0fx)", anisotropy, most);
+		}
+		if (anisotropy < 1.0f)
+			anisotropy = 1.0f;
+	}
+	return anisotropy;
+}
+#endif
+
 static void configure_sampler(int stage, BOOL mipmapped)
 {
 	/* the texture stage state each sampler was last configured from */
@@ -2085,8 +2131,20 @@ static void configure_sampler(int stage, BOOL mipmapped)
 	(texture_lod_bias) */
 	glSamplerParameterf(sampler, GL_TEXTURE_MIN_LOD, (float)state[D3DTSS_MAXMIPLEVEL]);
 	if (xgpu_capabilities.anisotropy)
-		glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY_EXT,
-			(min_filter == D3DTEXF_ANISOTROPIC && state[D3DTSS_MAXANISOTROPY] > 1) ? (float)state[D3DTSS_MAXANISOTROPY] : 1.0f);
+	{
+		float anisotropy = (min_filter == D3DTEXF_ANISOTROPIC && state[D3DTSS_MAXANISOTROPY] > 1) ?
+			(float)state[D3DTSS_MAXANISOTROPY] : 1.0f;
+#ifdef HALO_WEB
+		/* Settings, "Sharper textures at an angle": smoothly filtered,
+		mipmapped textures get at least that much (HALO_WEB_ANISOTROPY) */
+		if ((minification == GL_LINEAR_MIPMAP_LINEAR || minification == GL_LINEAR_MIPMAP_NEAREST) &&
+			web_anisotropy() > anisotropy)
+		{
+			anisotropy = web_anisotropy();
+		}
+#endif
+		glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
+	}
 	if (xgpu_capabilities.border_clamp)
 	{
 		color_to_vec4(state[D3DTSS_BORDERCOLOR], border);

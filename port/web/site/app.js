@@ -41,7 +41,8 @@ can run the game, copies the game data out of the player's disc image
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
   const settings = { touch: coarsePointer, touchLayout: 'modern', look: 1.4, vsync: true, glDebug: false, showTiming: false, silentSound: true,
-    touchCustom: {}, touchOpacity: 1, customRules: 0, customCharacter: 0, smallTextures: false };
+    touchCustom: {}, touchOpacity: 1, customRules: 0, customCharacter: 0, smallTextures: false,
+    resolution: 'auto', sharpTextures: !coarsePointer };
   try {
     Object.assign(settings, JSON.parse(localStorage.getItem('halo-web-settings') || '{}'));
   } catch { /* private browsing: the defaults */ }
@@ -777,15 +778,29 @@ can run the game, copies the game data out of the player's disc image
 
   // ---------- the running game
 
+  // Settings, Resolution: how many lines of pixels the game draws. The game
+  // lays itself out in 480 lines in the shape of the screen (src/web_main.c);
+  // more lines draw each of them with more pixels (d3d8_gl.c
+  // screen_mode_choose). Phones keep 480: every frame goes from the game's
+  // thread to the page, and their graphics memory is small. Computers and
+  // Macs get their screen's own resolution, up to 1080 lines.
+  function renderLines() {
+    // (captures of the start page's art draw more lines: window.__haloLines)
+    if (window.__haloLines) return window.__haloLines;
+    const short = Math.max(1, Math.min(window.innerWidth, window.innerHeight));
+    const native = Math.round(short * (window.devicePixelRatio || 1));
+    let lines;
+    if (settings.resolution === 'native') lines = native;
+    else if (settings.resolution === 'auto') lines = coarsePointer || settings.smallTextures ? 480 : Math.min(native, 1080);
+    else lines = Number(settings.resolution) || 480;
+    return Math.max(480, Math.min(2160, lines)) & ~1;
+  }
+
   function landscapeSize() {
-    // The game draws 480 lines in the shape of the screen (src/web_main.c).
-    // The canvas is that size too: the page scales it up, and each frame
-    // that goes from the game's thread to the page is a third of the pixels
-    // of the screen's own resolution.
+    // The canvas is the size the game draws: the page scales it to the screen.
     const long = Math.max(window.innerWidth, window.innerHeight);
     const short = Math.max(1, Math.min(window.innerWidth, window.innerHeight));
-    // (captures of the start page's art draw more lines: window.__haloLines)
-    const height = window.__haloLines || 480;
+    const height = renderLines();
     const width = Math.min(Math.round(height * long / short), Math.max(1440, height * 3));
     return { width: width & ~1, height };
   }
@@ -1001,6 +1016,8 @@ can run the game, copies the game data out of the player's disc image
     if (!settings.vsync) argumentsList.push('--HALO_NO_VSYNC=1');
     if (settings.glDebug) argumentsList.push('--HALO_GL_DEBUG=1');
     if (settings.smallTextures) argumentsList.push('--HALO_WEB_SMALL_TEXTURES=1');
+    // sharper textures on floors and walls seen at an angle
+    if (settings.sharpTextures) argumentsList.push('--HALO_WEB_ANISOTROPY=16');
     // the frame rate view also counts the WebGL calls and their time
     if (settings.showTiming) argumentsList.push('--HALO_WEB_GL_STATS=1');
 
@@ -1033,6 +1050,8 @@ can run the game, copies the game data out of the player's disc image
           // next time, textures that need less graphics memory
           settings.smallTextures = true;
           settings.smallTexturesChosen = true;
+          // and the lines of a phone
+          settings.resolution = 'auto';
           saveSettings();
           fatal(text);
         }
@@ -1733,6 +1752,19 @@ can run the game, copies the game data out of the player's disc image
       settings.smallTexturesChosen = true;
       saveSettings();
     };
+    for (const id of ['opt-resolution', 'menu-resolution']) {
+      $(id).value = settings.resolution;
+      $(id).onchange = (event) => {
+        settings.resolution = event.target.value;
+        $('opt-resolution').value = $('menu-resolution').value = settings.resolution;
+        saveSettings();
+        // the game takes it up between frames
+        if (state.shared) updateDisplaySize();
+        log('resolution: ' + settings.resolution + ' (' + renderLines() + ' lines)');
+      };
+    }
+    $('opt-sharp-textures').checked = settings.sharpTextures;
+    $('opt-sharp-textures').onchange = (event) => { settings.sharpTextures = event.target.checked; saveSettings(); };
     $('opt-gldebug').checked = settings.glDebug;
     $('opt-gldebug').onchange = (event) => { settings.glDebug = event.target.checked; saveSettings(); };
     $('iso-file').onchange = onImageChosen;
