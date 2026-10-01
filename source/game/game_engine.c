@@ -6621,6 +6621,18 @@ long game_engine_remap_vehicle(
 		vehicle1 = TAG_BLOCK_GET_ELEMENT(vehicles, 1, struct game_globals_vehicle);
 		vehicle2 = TAG_BLOCK_GET_ELEMENT(vehicles, 2, struct game_globals_vehicle);
 
+#ifdef HALO_WEB
+		/* (port/linux/game/custom_characters.c) a campaign level played as a
+		multiplayer map keeps all its own vehicles, Banshees and Pelicans
+		too, in any game with vehicles (the stock games' "Warthogs" means
+		a map's usual vehicles there) */
+		{
+			extern boolean custom_characters_arena(void);
+
+			if (custom_characters_arena() && global_variant.universal_variant.vehicle_set != 1)
+				return result;
+		}
+#endif
 		if (result != vehicle0->vehicle.index &&
 			result != vehicle1->vehicle.index &&
 			result != vehicle2->vehicle.index)

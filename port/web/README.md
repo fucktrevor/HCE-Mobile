@@ -305,6 +305,18 @@ game:
 - The campaign stays out: no AI is placed, no script runs by itself, there
   are no placed characters and no switch to the interior.
 - The characters (Elite, Grunt, Hunter, Marine) are the level's own.
+- The level's vehicles wait where it has them: Warthogs and Ghosts on the
+  beach and in the valley, Banshees by the beach and on the cliffs, and
+  Pelicans on the beach (two at the landing zone) and by the far shore, in
+  any game with vehicles (`game/game_engine.c` lets the island keep vehicles
+  multiplayer otherwise limits to the globals' three). A Pelican can be
+  flown: walk up to it and hold X (the action button) for its pilot's seat,
+  which can be reached from anywhere at or under the Pelican rather than
+  only at its cockpit (`units/units.c`). The Master Chief, a Marine and an
+  Elite get in with the animations they'd take a Banshee, Warthog or Ghost
+  with (the level's own pilots are put in by its scripts); Grunts and
+  Hunters, who drive nothing, can't. It flies like a Banshee, seen from
+  behind.
 
 Everyone in the game needs the campaign too.
 

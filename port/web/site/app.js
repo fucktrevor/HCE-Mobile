@@ -457,8 +457,9 @@ can run the game, copies the game data out of the player's disc image
   }
 
   // the game's caches of maps: z:\cacheNNN.map, and the campaign level the
-  // characters in multiplayer come from (z:\characters-b30.map)
-  const MAP_CACHE = /^save\/z\/(cache\d+|characters-\w+)\.map(\.part)?$/i;
+  // characters in multiplayer come from (z:\characters-b30.map), and Blood
+  // Gulch lending its multiplayer to a campaign level (z:\arena-bloodgulch.map)
+  const MAP_CACHE = /^save\/z\/(cache\d+|characters-\w+|arena-\w+)\.map(\.part)?$/i;
 
   async function exportSaves() {
     const files = [];

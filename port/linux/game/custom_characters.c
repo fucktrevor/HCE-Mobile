@@ -38,6 +38,10 @@ do not speak, and multiplayer has no AI.
 #include "game/game_globals.h"
 #include "scenario/scenario_definitions.h"
 #include "hs/hs_scenario_definitions.h"
+#include "units/unit_definitions.h"
+#include "objects/objects.h"
+#include "units/units.h"
+#include "models/model_animation_definitions.h"
 
 #include <math.h>
 
@@ -161,6 +165,8 @@ static struct
 	unsigned long checksum;
 	boolean available;
 	boolean arena;
+	/* the arena's Pelican, which can be flown */
+	long pelican_definition_index;
 	char message[160];
 } custom_characters;
 
@@ -983,6 +989,12 @@ switch to the interior are left out. */
 /* a game type entry that matches every game type (game_engine.c,
 match_game_type) */
 #define ALL_GAME_TYPES 12
+/* (the sizes of a scenario's vehicle and its palette entry, and where a
+unit definition's seats are) */
+#define ARENA_VEHICLE_SIZE 0x78
+#define ARENA_PALETTE_ENTRY_SIZE 0x30
+#define ARENA_PELICAN_REACH 5.f
+typedef char arena_unit_seat_size_assert[sizeof(struct unit_seat) == 0x11C ? 1 : -1];
 
 static boolean arena_root(struct donor_tag *tag)
 {
@@ -1033,6 +1045,66 @@ static long arena_tag(struct cache_tag_header *header, unsigned long group, char
 		}
 	}
 	return NONE;
+}
+
+/* the level's vehicles: its Warthogs, Ghosts, Banshees and Pelicans wait
+where the level has them (the campaign's scripts would have brought them);
+a Pelican can be flown (custom_arena_seat_distance and
+custom_arena_seat_label) */
+static void arena_vehicles(struct cache_tag_header *header, struct scenario *scenario)
+{
+	static char const *const flown[] =
+	{
+		"vehicles\\warthog\\warthog",
+		"vehicles\\ghost\\ghost",
+		"vehicles\\banshee\\banshee",
+		"vehicles\\pelican\\pelican",
+	};
+	long pelican = arena_tag(header, TAG('v', 'e', 'h', 'i'), "vehicles\\pelican\\pelican");
+	short index, placed = 0;
+
+	for (index = 0; index < scenario->vehicles.count; index++)
+	{
+		struct scenario_object_datum *vehicle = (struct scenario_object_datum *)
+			((byte *)scenario->vehicles.address + index * ARENA_VEHICLE_SIZE);
+		struct tag_reference const *reference;
+		short kind;
+
+		if (vehicle->palette_entry_index < 0 || vehicle->palette_entry_index >= scenario->vehicle_palette.count)
+			continue;
+		reference = (struct tag_reference const *)((byte const *)scenario->vehicle_palette.address +
+			vehicle->palette_entry_index * ARENA_PALETTE_ENTRY_SIZE);
+		for (kind = 0; kind < NUMBEROF(flown); kind++)
+		{
+			if (reference->index != NONE && !_stricmp(reference->name, flown[kind]))
+				break;
+		}
+		/* (not the Pelicans that fly in from far below the island, nor two
+		in one place) */
+		if (kind == NUMBEROF(flown) || vehicle->position.z < -20.f)
+			continue;
+		{
+			short other;
+
+			for (other = 0; other < index; other++)
+			{
+				struct scenario_object_datum const *earlier = (struct scenario_object_datum const *)
+					((byte const *)scenario->vehicles.address + other * ARENA_VEHICLE_SIZE);
+
+				if (!TEST_FLAG(earlier->placement_flags, _scenario_object_placement_not_automatic_bit) &&
+					distance_squared3d(&earlier->position, &vehicle->position) < 1.5f * 1.5f)
+				{
+					break;
+				}
+			}
+			if (other < index)
+				continue;
+		}
+		SET_FLAG(vehicle->placement_flags, _scenario_object_placement_not_automatic_bit, FALSE);
+		placed++;
+	}
+	custom_characters.pelican_definition_index = pelican != NONE ? (long)header->tag_instances[pelican].tag_index : NONE;
+	platform_log("custom arena: %d vehicles", (int)placed);
 }
 
 /* a game type's place by a start, so far off it */
@@ -1187,6 +1259,21 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 			}
 		}
 	}
+	/* (tests: HALO_ARENA_TEST_START=x,y,z[,facing] starts everyone there) */
+	if (getenv("HALO_ARENA_TEST_START"))
+	{
+		real_point3d point;
+		float facing = 0.f;
+
+		if (sscanf(getenv("HALO_ARENA_TEST_START"), "%f,%f,%f,%f", &point.x, &point.y, &point.z, &facing) >= 3)
+		{
+			for (index = 0; index < start_count; index++)
+			{
+				starts[index].position = point;
+				starts[index].facing = facing;
+			}
+		}
+	}
 	for (index = 0; index < start_count; index++)
 		mean_x += starts[index].position.x / start_count;
 	for (index = 0; index < start_count; index++)
@@ -1301,6 +1388,7 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 	}
 	scenario->bipeds.count = 0;
 	scenario->bsp_switch_trigger_volumes.count = 0;
+	arena_vehicles(header, scenario);
 	platform_log("custom arena: %s as a multiplayer map, %d starts, %d weapon spawns", ARENA_MAP_NAME,
 		(int)start_count, (int)equipment_count);
 	return TRUE;
@@ -1435,6 +1523,85 @@ boolean custom_characters_available(
 	void)
 {
 	return custom_characters.available;
+}
+
+/* (units.c, unit_find_nearby_seat) how far a player is from a seat they
+might take: the arena's Pelicans' pilot's seat, high in the cockpit, is
+within reach from anywhere under the Pelican or at its door */
+real custom_arena_seat_distance(
+	long unit_index,
+	long target_unit_index,
+	short seat_index,
+	real distance)
+{
+	if (custom_characters.arena && custom_characters.pelican_definition_index != NONE)
+	{
+		struct unit_datum *target = unit_get(target_unit_index);
+
+		if (target->definition_index == custom_characters.pelican_definition_index &&
+			TEST_FLAG(TAG_BLOCK_GET_ELEMENT(&unit_definition_get(target->definition_index)->unit.seats,
+				seat_index, struct unit_seat)->flags, _unit_seat_driver_bit))
+		{
+			real reach = distance3d(&unit_get(unit_index)->object.bounding_sphere_center,
+				&target->object.bounding_sphere_center) - ARENA_PELICAN_REACH;
+
+			if (reach < distance)
+				distance = reach;
+		}
+	}
+	return distance;
+}
+
+/* whether a unit has animations to get into a seat with this label */
+static boolean unit_can_enter_with(
+	long unit_index,
+	char const *label)
+{
+	struct animation_graph *graph = animation_graph_definition_get(
+		unit_definition_get(unit_get(unit_index)->definition_index)->object.animation_graph.index);
+	short index;
+
+	for (index = 0; index < graph->unit_seats.count; index++)
+	{
+		struct animation_graph_unit_seat *seat = TAG_BLOCK_GET_ELEMENT(&graph->unit_seats, index,
+			struct animation_graph_unit_seat);
+
+		if (!_stricmp(seat->label, label))
+		{
+			return seat->animations.count > _unit_seat_animation_seat_enter &&
+				animation_graph_animation_index_get(&seat->animations)[_unit_seat_animation_seat_enter].animation_index != NONE;
+		}
+	}
+	return FALSE;
+}
+
+/* (units.c) the animations a rider takes a seat with: in the arena, a
+Pelican's pilot whose Pelican pilot's animations can't get in (the AI's
+pilots are put there by the level's scripts) gets in as it would a
+Banshee, a Warthog or a Ghost, whichever it can (Grunts and Hunters drive
+nothing); the pilot is out of sight once in */
+char const *custom_arena_seat_label(
+	long unit_index,
+	char const *label)
+{
+	static char const *const instead[] =
+	{
+		"B-driver", "W-driver", "G-driver",
+	};
+
+	if (custom_characters.arena && label && !_stricmp(label, "P-driver") &&
+		unit_get(unit_index)->object.type != _object_type_vehicle &&
+		!unit_can_enter_with(unit_index, label))
+	{
+		short index;
+
+		for (index = 0; index < NUMBEROF(instead); index++)
+		{
+			if (unit_can_enter_with(unit_index, instead[index]))
+				return instead[index];
+		}
+	}
+	return label;
 }
 
 /* the map plays as a multiplayer arena (The Silent Cartographer) */

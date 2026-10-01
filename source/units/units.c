@@ -1330,7 +1330,14 @@ boolean unit_get_seat_entrance_point(
 				animation_seat_index,
 				struct animation_graph_unit_seat);
 
+#ifdef HALO_WEB
+			/* (port/linux/game/custom_characters.c) */
+			extern char const *custom_arena_seat_label(long unit_index, char const *label);
+
+			if (!_stricmp(animation_seat->label, custom_arena_seat_label(unit_index, seat->label)))
+#else
 			if (!_stricmp(animation_seat->label, seat->label))
+#endif
 			{
 				if (animation_seat_index != NONE)
 				{
@@ -5001,6 +5008,17 @@ short unit_find_nearby_seat(
 					&seat_position,
 					&unit->object.bounding_sphere_center);
 				real distance = MIN(entrance_distance, seat_distance);
+#ifdef HALO_WEB
+				/* (port/linux/game/custom_characters.c) a Pelican's pilot's seat
+				in a campaign level played as a multiplayer map can be taken
+				from underneath it */
+				{
+					extern real custom_arena_seat_distance(long unit_index, long target_unit_index,
+						short seat_index, real distance);
+
+					distance = custom_arena_seat_distance(unit_index, target_unit_index, seat_index, distance);
+				}
+#endif
 
 				if (distance < 1.f &&
 					(!TEST_FLAG(seat->flags, _unit_seat_requires_driver_bit) ||
@@ -7908,6 +7926,14 @@ static boolean unit_set_or_test_seat_and_weapon_label(
 	struct animation_graph *animation_graph = animation_graph_definition_get(unit_definition->object.animation_graph.index);
 	boolean result = FALSE;
 
+#ifdef HALO_WEB
+	{
+		/* (port/linux/game/custom_characters.c) */
+		extern char const *custom_arena_seat_label(long unit_index, char const *label);
+
+		seat_label = custom_arena_seat_label(object_index, seat_label);
+	}
+#endif
 	for (seat_index = 0; seat_index<animation_graph->unit_seats.count; ++seat_index)
 	{
 		struct animation_graph_unit_seat *unit_seat = TAG_BLOCK_GET_ELEMENT(&animation_graph->unit_seats, seat_index, struct animation_graph_unit_seat);
