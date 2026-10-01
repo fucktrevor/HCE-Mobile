@@ -281,15 +281,32 @@ game has the campaign:
 - The camera follows a character from behind; the Elite's from lower than
   its camera track (`camera/following_camera.c`).
 
-## The Silent Cartographer as a multiplayer map
+## The campaign's levels as multiplayer maps
 
-With the campaign in the copy of the game, the multiplayer map list ends with
-*Cartographer*: The Silent Cartographer's island as a multiplayer map, for
-split screen and System Link (`port/linux/game/custom_characters.c`, with
-`HALO_WEB` hooks in the map list, `interface/ui_widget_event_handler_functions.c`,
-and its text, `text/text_group.c`), shown with the campaign's picture of the
-level (it takes the place of the question mark the list has for a map it
-doesn't know). As the level loads for a multiplayer game:
+With the campaign in the copy of the game, the multiplayer map list goes on
+past the game's 13 maps with the campaign's ten levels, for split screen and
+System Link (`port/linux/game/custom_characters.c`, with `HALO_WEB` hooks in
+the map list, `interface/ui_widget_event_handler_functions.c`, its pictures
+and text, `interface/ui_widget_game_data_input_functions.c`, and its strings,
+`text/text_group.c`). Each shows the campaign's picture of the level (the
+list's pictures take the campaign's after its own) and is one part of the
+level (its structure BSP), as the campaign's switches between parts are left
+out:
+
+| In the list | Level | Part played |
+| --- | --- | --- |
+| Autumn | The Pillar of Autumn | `a10b` |
+| Halo | Halo | `a30_b` |
+| Truth | The Truth and Reconciliation | `a50_exterior` |
+| Cartographer | The Silent Cartographer | `b30a`, the island |
+| Control | Assault on the Control Room | `b40_a` |
+| Guilty Spark | 343 Guilty Spark | `c10_exteriora`, the swamp |
+| Library | The Library | `c20_1`, its first floor |
+| Betrayals | Two Betrayals | `c40_a` |
+| Keyes | Keyes | `d20_exterior` |
+| Maw | The Maw | `d40f` |
+
+As a level loads for a multiplayer game:
 
 - Blood Gulch lends it what multiplayer needs and a campaign level has not,
   the same way the characters are brought in: the multiplayer globals (flag,
@@ -297,27 +314,32 @@ doesn't know). As the level loads for a multiplayer game:
   list, the item collections, and the multiplayer menus. Blood Gulch is
   decompressed once into `z:\arena-bloodgulch.map`.
 - The level becomes a multiplayer scenario. Players start where the level's
-  AI squads stand outside (the beach, the valley, the crash site), red on the
-  island's west and blue on its east; each team's flag is at its side's
-  furthest start, the oddballs and two hills in the middle, a race track
-  across. Weapons and powerups (rocket launcher, sniper rifle, shotgun,
+  AI squads stand in the part played (on The Silent Cartographer, outside:
+  the beach, the valley, the crash site), as far apart as can be: each next
+  start is the place furthest from those already chosen, up to 40. Red and
+  blue are on the two sides of the part's longer way; each team's flag is at
+  its side's furthest start, the oddballs and two hills in the middle, a race
+  track across. Weapons and powerups (rocket launcher, sniper rifle, shotgun,
   overshield, camouflage, ...) wait near every third start, and everyone
   starts with Blood Gulch's equipment.
 - The campaign stays out: no AI is placed, no script runs by itself, there
-  are no placed characters and no switch to the interior.
-- The characters (Elite, Grunt, Hunter, Marine) are the level's own.
-- The level's vehicles wait where it has them: Warthogs and Ghosts on the
-  beach and in the valley, Banshees by the beach and on the cliffs, and
-  Pelicans on the beach (two at the landing zone) and by the far shore, in
-  any game with vehicles (`game/game_engine.c` lets the island keep vehicles
-  multiplayer otherwise limits to the globals' three). A Pelican can be
-  flown: walk up to it and hold X (the action button) for its pilot's seat,
-  which can be reached from anywhere at or under the Pelican rather than
-  only at its cockpit (`units/units.c`). The Master Chief, a Marine and an
-  Elite get in with the animations they'd take a Banshee, Warthog or Ghost
-  with (the level's own pilots are put in by its scripts); Grunts and
-  Hunters, who drive nothing, can't. It flies like a Banshee, seen from
-  behind.
+  are no placed characters and no switch to another part. Doors the
+  campaign's scripts would open stay as the level starts them.
+- The characters (Elite, Grunt, Hunter, Marine) are the level's own; one the
+  level doesn't have plays as the Master Chief.
+- The level's vehicles in the part played wait where it has them (Warthogs,
+  rocket Warthogs, Ghosts, Banshees, Scorpions, Covenant turrets and
+  Pelicans: on The Silent Cartographer, Warthogs and Ghosts on the beach and
+  in the valley, Banshees by the beach and on the cliffs, and Pelicans on
+  the beach, two at the landing zone), in any game with vehicles
+  (`game/game_engine.c` lets a level keep vehicles multiplayer otherwise
+  limits to the globals' three). A Pelican can be flown: walk up to it and
+  hold X (the action button) for its pilot's seat, which can be reached from
+  anywhere at or under the Pelican rather than only at its cockpit
+  (`units/units.c`). The Master Chief, a Marine and an Elite get in with the
+  animations they'd take a Banshee, Warthog or Ghost with (the level's own
+  pilots are put in by its scripts); Grunts and Hunters, who drive nothing,
+  can't. It flies like a Banshee, seen from behind.
 
 Everyone in the game needs the campaign too.
 

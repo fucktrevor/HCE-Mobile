@@ -445,6 +445,7 @@ void network_player_attach_unit(long player_index, long unit_index);
 void network_player_detach_unit(long player_index);
 unsigned long custom_characters_checksum(void);
 long custom_characters_biped(long character);
+boolean custom_characters_arena(void);
 
 enum
 {
@@ -632,7 +633,9 @@ static long multiplayer_character_biped(
 	if (biped == NONE && tell)
 	{
 		multiplayer_characters.told_unavailable = TRUE;
-		web_custom_message("In multiplayer you can be an Elite, a Grunt, a Hunter or a Marine.");
+		web_custom_message(custom_characters_arena() ?
+			"This level doesn't have that character: you're the Master Chief." :
+			"In multiplayer you can be an Elite, a Grunt, a Hunter or a Marine.");
 	}
 	return biped;
 }

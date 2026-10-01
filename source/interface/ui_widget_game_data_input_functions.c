@@ -354,6 +354,12 @@ symbols in this file:
 #include "text/text_group.h"
 #include "text/unicode.h"
 
+#ifdef HALO_WEB
+/* port/linux/game/custom_characters.c: the campaign's levels as multiplayer maps */
+extern short custom_arena_list(char **paths, short maximum);
+extern short custom_arena_map_index(char const *map_name, boolean picture);
+#endif
+
 /* ---------- constants */
 
 enum
@@ -1155,6 +1161,13 @@ void server_list_menu_update(
 					(server->open == TRUE) ? 20 : 21;
 				map_name_text->parameters.text_box.string_list_index =
 					map_bitmap->animation.current_frame_index;
+#ifdef HALO_WEB
+				if (custom_arena_map_index(map_name, FALSE) != NONE)
+				{
+					map_bitmap->animation.current_frame_index = custom_arena_map_index(map_name, TRUE);
+					map_name_text->parameters.text_box.string_list_index = custom_arena_map_index(map_name, FALSE);
+				}
+#endif
 
 				switch (server->engine_type)
 				{
@@ -2428,6 +2441,13 @@ void multiplayer_game_set_text_box_for_map_name(
 	if (game)
 	{
 		map_name = game->map_name;
+#ifdef HALO_WEB
+	if (custom_arena_map_index(map_name, FALSE) != NONE)
+	{
+		widget->parameters.text_box.string_list_index = custom_arena_map_index(map_name, FALSE);
+		return;
+	}
+#endif
 	if (strstr(map_name, "beavercreek"))
 	{
 		widget->parameters.text_box.string_list_index = 0;
@@ -2696,6 +2716,13 @@ void multiplayer_game_set_bitmap_for_map(
 	if (game)
 	{
 		map_name = game->map_name;
+#ifdef HALO_WEB
+	if (custom_arena_map_index(map_name, TRUE) != NONE)
+	{
+		widget->animation.current_frame_index = custom_arena_map_index(map_name, TRUE);
+		return;
+	}
+#endif
 	if (strstr(map_name, "beavercreek"))
 	{
 		widget->animation.current_frame_index = 0;
@@ -4250,6 +4277,23 @@ void mp_level_select_list_update_displayed_items(
 			(short)displayed_item_indices[item_index];
 		map_description->parameters.text_box.string_list_index =
 			(short)displayed_item_indices[item_index];
+#ifdef HALO_WEB
+		/* port: the campaign's levels after the game's maps
+		(port/linux/game/custom_characters.c) */
+		if (displayed_item_indices[item_index] >= 13)
+		{
+			char *levels[16];
+			short level_count = custom_arena_list(levels, 16);
+			long level = displayed_item_indices[item_index] - 13;
+
+			if (level < level_count)
+			{
+				map_name->parameters.text_box.string_list_index = custom_arena_map_index(levels[level], FALSE);
+				map_description->parameters.text_box.string_list_index = custom_arena_map_index(levels[level], FALSE);
+				map_bitmap->animation.current_frame_index = custom_arena_map_index(levels[level], TRUE);
+			}
+		}
+#endif
 	}
 	return;
 }

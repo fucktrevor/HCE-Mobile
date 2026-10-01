@@ -3154,11 +3154,11 @@ static boolean create_and_begin_editing_new_player_profile(
 }
 
 #ifdef HALO_WEB
-/* port: the multiplayer maps, and The Silent Cartographer as one where the
+/* port: the multiplayer maps, and the campaign's levels as more where the
 copy of the game has the campaign (port/linux/game/custom_characters.c) */
-extern boolean custom_arena_available(void);
+extern short custom_arena_list(char **paths, short maximum);
 
-static char *web_multiplayer_levels[14];
+static char *web_multiplayer_levels[13 + 16];
 
 static short web_multiplayer_level_list(
 	char ***levels)
@@ -3166,8 +3166,7 @@ static short web_multiplayer_level_list(
 	short level_count = 13;
 
 	csmemcpy(web_multiplayer_levels, event_handler_functions.multiplayer_levels, 13 * sizeof(char *));
-	if (custom_arena_available())
-		web_multiplayer_levels[level_count++] = "levels\\b30\\b30";
+	level_count += custom_arena_list(web_multiplayer_levels + 13, 16);
 	*levels = web_multiplayer_levels;
 	return level_count;
 }

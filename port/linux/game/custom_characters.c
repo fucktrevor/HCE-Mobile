@@ -168,6 +168,8 @@ static struct
 	boolean arena;
 	/* the arena's Pelican, which can be flown */
 	long pelican_definition_index;
+	/* which campaign level is played as a multiplayer map */
+	short arena_level;
 	char message[160];
 } custom_characters;
 
@@ -970,21 +972,48 @@ done:
 	return ok;
 }
 
-/* ---------- custom arenas: The Silent Cartographer as a multiplayer map
+/* ---------- custom arenas: the campaign's levels as multiplayer maps
 
-A multiplayer game on b30 (its entry in the multiplayer map list) plays the
-level's island. As its tags load, Blood Gulch lends it what multiplayer needs
+A multiplayer game on a campaign level (its entry in the multiplayer map
+list, after the game's 13) plays one of the level's parts (its structure
+BSPs): The Silent Cartographer's island, say. As its tags load, Blood Gulch lends it what multiplayer needs
 and a campaign level has not: the multiplayer globals (the flag, the ball,
 the hill's shader, the multiplayer biped, vehicles and announcer), the
 weapon list, the item collections the game types spawn, and the multiplayer
 menus. The level becomes a multiplayer scenario: players start where the
-level's AI squads stand outside, on two sides of the island for team games;
+level's AI squads stand in that part, on two sides of it for team games;
 weapons and powerups wait near some of them; everyone starts with Blood
 Gulch's equipment; and the level's AI, scripts, placed characters and its
-switch to the interior are left out. */
+switches to its other parts are left out. */
 
-#define ARENA_MAP_NAME "b30"
+/* the levels, which part of each is played, and how the map list shows it */
+static struct arena_level
+{
+	char const *name;
+	char const *path;
+	short structure_bsp_index;
+	wchar_t const *title;
+	wchar_t const *description;
+} const arena_levels[] =
+{
+	{ "a10", "levels\\a10\\a10", 1, L"Autumn", L"Aboard the Pillar\r\nof Autumn" },
+	{ "a30", "levels\\a30\\a30", 1, L"Halo", L"The ring's\r\nsurface" },
+	{ "a50", "levels\\a50\\a50", 0, L"Truth", L"The Covenant\r\nship's canyon" },
+	{ "b30", "levels\\b30\\b30", 0, L"Cartographer", L"Covenant Island\r\nUnder Siege" },
+	{ "b40", "levels\\b40\\b40", 0, L"Control", L"Assault on the\r\nControl Room" },
+	{ "c10", "levels\\c10\\c10", 0, L"Guilty Spark", L"343 Guilty Spark's\r\nswamp" },
+	{ "c20", "levels\\c20\\c20", 0, L"Library", L"The Library's\r\nfirst floor" },
+	{ "c40", "levels\\c40\\c40", 0, L"Betrayals", L"Two Betrayals" },
+	{ "d20", "levels\\d20\\d20", 1, L"Keyes", L"The Covenant\r\nship, overrun" },
+	{ "d40", "levels\\d40\\d40", 5, L"Maw", L"The Pillar of\r\nAutumn's engines" },
+};
+#define NUMBER_OF_ARENA_LEVELS ((short)NUMBEROF(arena_levels))
+short custom_arena_level(char const *map_name);
+static boolean arena_picture_ready = FALSE;
+#define ARENA_ALONG(point) (along_y ? (point).y : (point).x)
+#define ARENA_CARTOGRAPHER 3
 #define MAXIMUM_ARENA_STARTS 40
+#define MAXIMUM_ARENA_CANDIDATES 4096
 #define ARENA_START_SPACING 5.0f
 #define MAXIMUM_ARENA_FLAGS 24
 /* a game type entry that matches every game type (game_engine.c,
@@ -995,10 +1024,10 @@ unit definition's seats are) */
 #define ARENA_VEHICLE_SIZE 0x78
 #define ARENA_PALETTE_ENTRY_SIZE 0x30
 #define ARENA_PELICAN_REACH 5.f
-/* the campaign's picture of b30 (a10, a30, a50, b30, ...) and the multiplayer
-list's question mark */
-#define ARENA_CAMPAIGN_PICTURE 3
-#define ARENA_MULTIPLAYER_PICTURE 13
+/* the multiplayer map list's pictures and text: the game's 13 maps, a
+question mark for a map it doesn't know, then the campaign's levels */
+#define ARENA_UNKNOWN_MAP 13
+#define ARENA_FIRST_LEVEL_PICTURE 14
 typedef char arena_unit_seat_size_assert[sizeof(struct unit_seat) == 0x11C ? 1 : -1];
 
 static boolean arena_root(struct donor_tag *tag)
@@ -1056,13 +1085,17 @@ static long arena_tag(struct cache_tag_header *header, unsigned long group, char
 where the level has them (the campaign's scripts would have brought them);
 a Pelican can be flown (custom_arena_seat_distance and
 custom_arena_seat_label) */
-static void arena_vehicles(struct cache_tag_header *header, struct scenario *scenario)
+static void arena_vehicles(struct cache_tag_header *header, struct scenario *scenario,
+	struct arena_level const *level)
 {
 	static char const *const flown[] =
 	{
 		"vehicles\\warthog\\warthog",
+		"vehicles\\rwarthog\\rwarthog",
 		"vehicles\\ghost\\ghost",
 		"vehicles\\banshee\\banshee",
+		"vehicles\\scorpion\\scorpion",
+		"vehicles\\c gun turret\\c gun turret",
 		"vehicles\\pelican\\pelican",
 	};
 	long pelican = arena_tag(header, TAG('v', 'e', 'h', 'i'), "vehicles\\pelican\\pelican");
@@ -1084,9 +1117,10 @@ static void arena_vehicles(struct cache_tag_header *header, struct scenario *sce
 			if (reference->index != NONE && !_stricmp(reference->name, flown[kind]))
 				break;
 		}
-		/* (not the Pelicans that fly in from far below the island, nor two
-		in one place) */
-		if (kind == NUMBEROF(flown) || vehicle->position.z < -20.f)
+		/* (not the Pelicans that fly in from far below The Silent
+		Cartographer's island, nor two in one place; and only those in the
+		part played are placed) */
+		if (kind == NUMBEROF(flown) || (level == &arena_levels[ARENA_CARTOGRAPHER] && vehicle->position.z < -20.f))
 			continue;
 		{
 			short other;
@@ -1155,6 +1189,8 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 	struct scenario_netgame_flag *flags;
 	short start_count = 0, equipment_count = 0, flag_count = 0, encounter_index;
 	real mean_x = 0.f;
+	boolean along_y = FALSE;
+	struct arena_level const *level = &arena_levels[custom_characters.arena_level];
 	byte *memory;
 	unsigned long size;
 
@@ -1208,61 +1244,98 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 	starting_equipment = (struct scenario_starting_equipment *)(equipment + MAXIMUM_ARENA_STARTS);
 	flags = (struct scenario_netgame_flag *)(starting_equipment + donor_equipment_count);
 
-	/* where players start: the level's own, and where the AI's squads
-	stand outside on the island, apart from each other */
-	for (index = 0; index < scenario->players.count && start_count < MAXIMUM_ARENA_STARTS; index++)
+	/* where players start: where the AI's squads stand in the part played
+	(and the level's own start, in its first part), as far apart as can be:
+	each next start is the place furthest from those already chosen */
 	{
-		struct encounter_player_starting_location const *start = (struct encounter_player_starting_location const *)
-			((byte const *)scenario->players.address + index * sizeof(*start));
+		struct encounter_player_starting_location *candidates =
+			malloc(MAXIMUM_ARENA_CANDIDATES * sizeof(*candidates));
+		real *nearest = malloc(MAXIMUM_ARENA_CANDIDATES * sizeof(*nearest));
+		long candidate_count = 0, candidate;
 
-		starts[start_count].position = start->position;
-		starts[start_count].facing = start->facing;
-		start_count++;
-	}
-	for (encounter_index = 0; encounter_index < scenario->ai_encounters.count; encounter_index++)
-	{
-		struct encounter_definition const *encounter = (struct encounter_definition const *)
-			((byte const *)scenario->ai_encounters.address + encounter_index * sizeof(struct encounter_definition));
-		short squad_index;
-
-		/* (outside: the beach, the valley and the crash site; the island's
-		structure has the facility's first floors too) */
-		if (encounter->runtime_structure_bsp_reference_index != 0 ||
-			(strncmp(encounter->name, "beach", 5) && strncmp(encounter->name, "valley", 6) &&
-				strncmp(encounter->name, "downed", 6)) ||
-			/* (in the air, in their Banshees) */
-			!strcmp(encounter->name, "beach_banshee"))
+		if (!candidates || !nearest)
 		{
-			continue;
+			if (candidates)
+				free(candidates);
+			if (nearest)
+				free(nearest);
+			return FALSE;
 		}
-		for (squad_index = 0; squad_index < encounter->squads.count; squad_index++)
+		if (level->structure_bsp_index == 0)
 		{
-			struct squad_definition const *squad = (struct squad_definition const *)
-				((byte const *)encounter->squads.address + squad_index * sizeof(struct squad_definition));
-			short location_index;
-
-			for (location_index = 0; location_index < squad->starting_locations.count && start_count < MAXIMUM_ARENA_STARTS;
-				location_index++)
+			for (index = 0; index < scenario->players.count && candidate_count < MAXIMUM_ARENA_CANDIDATES; index++)
 			{
-				struct actor_starting_location const *location = (struct actor_starting_location const *)
-					((byte const *)squad->starting_locations.address + location_index * sizeof(struct actor_starting_location));
-				short other;
-
-				for (other = 0; other < start_count; other++)
-				{
-					if (distance_squared3d(&starts[other].position, &location->position) <
-						ARENA_START_SPACING * ARENA_START_SPACING)
-					{
-						break;
-					}
-				}
-				if (other < start_count)
-					continue;
-				starts[start_count].position = location->position;
-				starts[start_count].facing = location->facing;
-				start_count++;
+				candidates[candidate_count++] = *(struct encounter_player_starting_location const *)
+					((byte const *)scenario->players.address + index * sizeof(*starts));
 			}
 		}
+		for (encounter_index = 0; encounter_index < scenario->ai_encounters.count; encounter_index++)
+		{
+			struct encounter_definition const *encounter = (struct encounter_definition const *)
+				((byte const *)scenario->ai_encounters.address + encounter_index * sizeof(struct encounter_definition));
+			short squad_index;
+
+			/* (the part played's; on The Silent Cartographer, outside: the
+			beach, the valley and the crash site, though the island's structure
+			has the facility's first floors too) */
+			if (encounter->runtime_structure_bsp_reference_index != level->structure_bsp_index)
+				continue;
+			if (level == &arena_levels[ARENA_CARTOGRAPHER] &&
+				((strncmp(encounter->name, "beach", 5) && strncmp(encounter->name, "valley", 6) &&
+					strncmp(encounter->name, "downed", 6)) ||
+				/* (in the air, in their Banshees) */
+				!strcmp(encounter->name, "beach_banshee")))
+			{
+				continue;
+			}
+			for (squad_index = 0; squad_index < encounter->squads.count; squad_index++)
+			{
+				struct squad_definition const *squad = (struct squad_definition const *)
+					((byte const *)encounter->squads.address + squad_index * sizeof(struct squad_definition));
+				short location_index;
+
+				for (location_index = 0;
+					location_index < squad->starting_locations.count && candidate_count < MAXIMUM_ARENA_CANDIDATES;
+					location_index++)
+				{
+					struct actor_starting_location const *location = (struct actor_starting_location const *)
+						((byte const *)squad->starting_locations.address + location_index * sizeof(struct actor_starting_location));
+
+					csmemset(&candidates[candidate_count], 0, sizeof(*candidates));
+					candidates[candidate_count].position = location->position;
+					candidates[candidate_count].facing = location->facing;
+					candidate_count++;
+				}
+			}
+		}
+		for (candidate = 0; candidate < candidate_count; candidate++)
+			nearest[candidate] = 1.0e18f;
+		while (candidate_count > 0 && start_count < MAXIMUM_ARENA_STARTS)
+		{
+			long best = 0;
+
+			/* (the first is the first found: the level's start, or its
+			first squad's) */
+			for (candidate = 1; start_count > 0 && candidate < candidate_count; candidate++)
+			{
+				if (nearest[candidate] > nearest[best])
+					best = candidate;
+			}
+			if (start_count > 0 && nearest[best] < ARENA_START_SPACING * ARENA_START_SPACING)
+				break;
+			starts[start_count].position = candidates[best].position;
+			starts[start_count].facing = candidates[best].facing;
+			for (candidate = 0; candidate < candidate_count; candidate++)
+			{
+				real distance = distance_squared3d(&candidates[candidate].position, &candidates[best].position);
+
+				if (distance < nearest[candidate])
+					nearest[candidate] = distance;
+			}
+			start_count++;
+		}
+		free(candidates);
+		free(nearest);
 	}
 	/* (tests: HALO_ARENA_TEST_START=x,y,z[,facing] starts everyone there) */
 	if (getenv("HALO_ARENA_TEST_START"))
@@ -1279,12 +1352,33 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 			}
 		}
 	}
+	/* (the sides are along the part's longer way: west and east on The
+	Silent Cartographer) */
+	{
+		real low[2] = { 1.0e9f, 1.0e9f }, high[2] = { -1.0e9f, -1.0e9f };
+
+		for (index = 0; index < start_count; index++)
+		{
+			short axis;
+
+			for (axis = 0; axis < 2; axis++)
+			{
+				real value = axis ? starts[index].position.y : starts[index].position.x;
+
+				if (value < low[axis])
+					low[axis] = value;
+				if (value > high[axis])
+					high[axis] = value;
+			}
+		}
+		along_y = high[1] - low[1] > high[0] - low[0];
+	}
 	for (index = 0; index < start_count; index++)
-		mean_x += starts[index].position.x / start_count;
+		mean_x += ARENA_ALONG(starts[index].position) / start_count;
 	for (index = 0; index < start_count; index++)
 	{
-		/* red on the beach's west, blue east; every game type */
-		starts[index].team_index = starts[index].position.x < mean_x ? 0 : 1;
+		/* red on one side, blue the other; every game type */
+		starts[index].team_index = ARENA_ALONG(starts[index].position) < mean_x ? 0 : 1;
 		starts[index].game_types[0] = ALL_GAME_TYPES;
 	}
 
@@ -1298,11 +1392,11 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 
 		for (index = 0; index < start_count; index++)
 		{
-			real offset = (real)fabs(starts[index].position.x - mean_x);
+			real offset = (real)fabs(ARENA_ALONG(starts[index].position) - mean_x);
 
-			if (starts[index].position.x < starts[west].position.x)
+			if (ARENA_ALONG(starts[index].position) < ARENA_ALONG(starts[west].position))
 				west = (short)index;
-			if (starts[index].position.x > starts[east].position.x)
+			if (ARENA_ALONG(starts[index].position) > ARENA_ALONG(starts[east].position))
 				east = (short)index;
 			if (offset < best[0])
 			{
@@ -1376,8 +1470,15 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 	scenario->scenario_starting_equipment.address = starting_equipment;
 	scenario->netgame_flags.count = flag_count;
 	scenario->netgame_flags.address = flags;
+	/* the part played is the level's only part */
+	if (level->structure_bsp_index > 0 && level->structure_bsp_index < scenario->structure_bsp_references.count)
+	{
+		scenario->structure_bsp_references.address = (byte *)scenario->structure_bsp_references.address +
+			level->structure_bsp_index * sizeof(struct scenario_structure_bsp_reference);
+	}
+	scenario->structure_bsp_references.count = 1;
 	/* no campaign: no AI placed, no script run by itself, no placed
-	characters, no switch inside */
+	characters, no switch to another part */
 	for (index = 0; index < scenario->ai_encounters.count; index++)
 	{
 		struct encounter_definition *encounter = (struct encounter_definition *)
@@ -1393,9 +1494,9 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 	}
 	scenario->bipeds.count = 0;
 	scenario->bsp_switch_trigger_volumes.count = 0;
-	arena_vehicles(header, scenario);
-	platform_log("custom arena: %s as a multiplayer map, %d starts, %d weapon spawns", ARENA_MAP_NAME,
-		(int)start_count, (int)equipment_count);
+	arena_vehicles(header, scenario, level);
+	platform_log("custom arena: %s (part %d) as a multiplayer map, %d starts, %d weapon spawns", level->name,
+		(int)level->structure_bsp_index, (int)start_count, (int)equipment_count);
 	return TRUE;
 }
 
@@ -1403,7 +1504,7 @@ static struct tag_import const arena_import =
 {
 	"d:\\maps\\bloodgulch.map",
 	"z:\\arena-bloodgulch.map",
-	"Making The Silent Cartographer a multiplayer map (only this once)...",
+	"Making the campaign's levels multiplayer maps (only this once)...",
 	arena_root,
 	arena_force_new,
 	arena_after,
@@ -1437,28 +1538,55 @@ static boolean import_tags(struct cache_tag_header *header, struct tag_import co
 	return ok && custom_characters.imports[slot].file != INVALID_HANDLE_VALUE;
 }
 
-/* the multiplayer map list's picture for a map it doesn't know (its last,
-a question mark) becomes the campaign's picture of The Silent Cartographer:
-the two are pictures of the same size in the menus' map, so the campaign
-one's description takes the question mark's place */
+/* the multiplayer map list's pictures, with the campaign's pictures of its
+levels after the game's 13 maps and its question mark for a map it doesn't
+know: the pictures are the same size in the menus' map, so the list's
+pictures (descriptions of where each is in the map) take the campaign's
+after its own */
 static void arena_preview(
 	struct cache_tag_header *header)
 {
+	static struct bitmap_data *pictures = NULL;
 	long campaign = arena_tag(header, TAG('b', 'i', 't', 'm'), "ui\\shell\\bitmaps\\sp_levels");
 	long multiplayer = arena_tag(header, TAG('b', 'i', 't', 'm'), "ui\\shell\\bitmaps\\mp_map_grafix");
 
+	arena_picture_ready = FALSE;
 	if (campaign != NONE && multiplayer != NONE)
 	{
 		struct bitmap_group *from = (struct bitmap_group *)header->tag_instances[campaign].base_address;
 		struct bitmap_group *to = (struct bitmap_group *)header->tag_instances[multiplayer].base_address;
-		struct bitmap_data *picture = (struct bitmap_data *)from->bitmaps.address + ARENA_CAMPAIGN_PICTURE;
-		struct bitmap_data *unknown = (struct bitmap_data *)to->bitmaps.address + ARENA_MULTIPLAYER_PICTURE;
+		struct bitmap_data const *levels = (struct bitmap_data const *)from->bitmaps.address;
+		struct bitmap_data const *maps = (struct bitmap_data const *)to->bitmaps.address;
+		struct bitmap_group_sequence *sequence = (struct bitmap_group_sequence *)to->sequences.address;
+		short level;
 
-		if (from->bitmaps.count > ARENA_CAMPAIGN_PICTURE && to->bitmaps.count == ARENA_MULTIPLAYER_PICTURE + 1 &&
-			picture->width == unknown->width && picture->height == unknown->height && picture->format == unknown->format)
+		if (from->bitmaps.count < NUMBER_OF_ARENA_LEVELS || to->bitmaps.count != ARENA_FIRST_LEVEL_PICTURE ||
+			to->sequences.count != 1 || sequence->first_bitmap_index != 0 ||
+			sequence->bitmap_count != ARENA_FIRST_LEVEL_PICTURE)
 		{
-			*unknown = *picture;
+			return;
 		}
+		for (level = 0; level < NUMBER_OF_ARENA_LEVELS; level++)
+		{
+			if (levels[level].width != maps[0].width || levels[level].height != maps[0].height ||
+				levels[level].format != maps[0].format)
+			{
+				return;
+			}
+		}
+		if (!pictures)
+		{
+			pictures = platform_contiguous_alloc((ARENA_FIRST_LEVEL_PICTURE + NUMBER_OF_ARENA_LEVELS) * sizeof(*pictures),
+				0x1000, PLATFORM_ANY_PHYSICAL_ADDRESS, CONTIGUOUS_READWRITE);
+			if (!pictures)
+				return;
+		}
+		csmemcpy(pictures, maps, ARENA_FIRST_LEVEL_PICTURE * sizeof(*pictures));
+		csmemcpy(pictures + ARENA_FIRST_LEVEL_PICTURE, levels, NUMBER_OF_ARENA_LEVELS * sizeof(*pictures));
+		to->bitmaps.address = pictures;
+		to->bitmaps.count = ARENA_FIRST_LEVEL_PICTURE + NUMBER_OF_ARENA_LEVELS;
+		sequence->bitmap_count = ARENA_FIRST_LEVEL_PICTURE + NUMBER_OF_ARENA_LEVELS;
+		arena_picture_ready = TRUE;
 	}
 }
 
@@ -1486,10 +1614,11 @@ void custom_characters_tags_loaded(
 		arena_preview(header);
 	if (!map_name || !map_name[0] || !_stricmp(map_name, "ui"))
 		return;
-	/* The Silent Cartographer in a multiplayer game: an arena, with the
-	characters its own */
-	if (!_stricmp(map_name, ARENA_MAP_NAME) && game_variant_global.game_engine_index != 0)
+	/* a campaign level in a multiplayer game: an arena, with the characters
+	its own */
+	if (custom_arena_level(map_name) != NONE && game_variant_global.game_engine_index != 0)
 	{
+		custom_characters.arena_level = custom_arena_level(map_name);
 		custom_characters.arena = import_tags(header, &arena_import, _import_arena);
 		custom_characters.available = custom_characters.arena;
 		custom_characters.checksum = header->checksum;
@@ -1650,41 +1779,121 @@ unsigned long custom_characters_checksum(
 	return custom_characters.available ? custom_characters.checksum : 0;
 }
 
-/* (ui_widget_event_handler_functions.c) whether The Silent Cartographer can
-be played as a multiplayer map: the copy of the game has it and Blood
-Gulch */
-boolean custom_arena_available(
-	void)
+/* which campaign level a map is ("b30", or "levels\\b30\\b30"), or NONE */
+short custom_arena_level(
+	char const *map_name)
 {
-	static int available = -1;
+	short level;
 
-	if (available < 0)
+	if (!map_name)
+		return NONE;
+	for (level = 0; level < NUMBER_OF_ARENA_LEVELS; level++)
 	{
-		FILE *level = fopen("d:\\maps\\b30.map", "rb");
-		FILE *gulch = fopen("d:\\maps\\bloodgulch.map", "rb");
-
-		available = level && gulch;
-		platform_log("custom arena: %s", available ? "The Silent Cartographer can be played as a multiplayer map" : "no campaign");
-		if (level)
-			fclose(level);
-		if (gulch)
-			fclose(gulch);
+		if (!_stricmp(map_name, arena_levels[level].name) || !_stricmp(map_name, arena_levels[level].path))
+			return level;
 	}
-	return available != 0;
+	return NONE;
 }
 
-/* (text_group.c) The Silent Cartographer's name and description in the
-multiplayer map lists (the 14th, after the game's 13), or NULL */
+/* whether a campaign level can be played as a multiplayer map: the copy of
+the game has it and Blood Gulch */
+static boolean arena_level_available(
+	short level)
+{
+	static signed char available[NUMBEROF(arena_levels)];
+	static int gulch = -1;
+
+	if (gulch < 0)
+	{
+		FILE *file = fopen("d:\\maps\\bloodgulch.map", "rb");
+
+		gulch = file != NULL;
+		if (file)
+			fclose(file);
+	}
+	if (!available[level])
+	{
+		char path[64];
+		FILE *file;
+
+		sprintf(path, "d:\\maps\\%s.map", arena_levels[level].name);
+		file = fopen(path, "rb");
+		available[level] = gulch && file ? 1 : -1;
+		if (file)
+			fclose(file);
+	}
+	return available[level] > 0;
+}
+
+/* (ui_widget_event_handler_functions.c) the campaign levels that can be
+played as multiplayer maps, after the game's: their paths, and how many */
+short custom_arena_list(
+	char **paths,
+	short maximum)
+{
+	short level, count = 0;
+
+	for (level = 0; level < NUMBER_OF_ARENA_LEVELS && count < maximum; level++)
+	{
+		if (arena_level_available(level))
+			paths[count++] = (char *)arena_levels[level].path;
+	}
+	if (paths != NULL && count == 0)
+		platform_log("custom arena: no campaign");
+	return count;
+}
+
+/* (ui_widget_game_data_input_functions.c) the picture or the text for a map
+in the multiplayer menus, by its name: a campaign level's (past the question
+mark for a map the menus don't know), or NONE for the game's maps */
+short custom_arena_map_index(
+	char const *map_name,
+	boolean picture)
+{
+	short level = NONE, index;
+
+	if (map_name)
+	{
+		for (index = 0; index < NUMBER_OF_ARENA_LEVELS && level == NONE; index++)
+		{
+			if (strstr(map_name, arena_levels[index].path) || !_stricmp(map_name, arena_levels[index].name))
+				level = index;
+		}
+	}
+	if (level == NONE)
+		return NONE;
+	return picture && !arena_picture_ready ? ARENA_UNKNOWN_MAP : ARENA_FIRST_LEVEL_PICTURE + level;
+}
+
+/* (text_group.c) a campaign level's name and description in the
+multiplayer map lists, or NULL */
 wchar_t *custom_arena_string(
 	char const *list_name,
 	short string_index)
 {
-	if (string_index != 13 || !list_name || !custom_arena_available())
+	static wchar_t description[NUMBEROF(arena_levels)][96];
+	short level = string_index - ARENA_FIRST_LEVEL_PICTURE;
+
+	if (level < 0 || level >= NUMBER_OF_ARENA_LEVELS || !list_name)
 		return NULL;
 	if (!_stricmp(list_name, "ui\\shell\\main_menu\\mp_map_list"))
-		return L"Cartographer";
+		return (wchar_t *)arena_levels[level].title;
 	if (!_stricmp(list_name, "ui\\shell\\main_menu\\multiplayer_type_select\\mp_map_select\\map_data"))
-		return L"Covenant Island\r\nUnder Siege\r\n\r\n2-16 players";
+	{
+		if (!description[level][0])
+		{
+			short length = 0;
+			wchar_t const *from;
+			static wchar_t const players[] = L"\r\n\r\n2-16 players";
+
+			for (from = arena_levels[level].description; *from && length < 60; from++)
+				description[level][length++] = *from;
+			for (from = players; *from; from++)
+				description[level][length++] = *from;
+			description[level][length] = 0;
+		}
+		return description[level];
+	}
 	return NULL;
 }
 
@@ -1702,9 +1911,15 @@ long custom_characters_biped(
 		"characters\\hunter\\hunter",
 	};
 
+	long biped;
+
 	if (!custom_characters.available || character < 0 || character >= NUMBEROF(names) || !names[character])
 		return NONE;
-	return tag_loaded(TAG('b', 'i', 'p', 'd'), names[character]);
+	biped = tag_loaded(TAG('b', 'i', 'p', 'd'), names[character]);
+	/* (the campaign levels without armored Marines have their plainer ones) */
+	if (biped == NONE && character == 2)
+		biped = tag_loaded(TAG('b', 'i', 'p', 'd'), "characters\\marine\\marine");
+	return biped;
 }
 
 #endif
