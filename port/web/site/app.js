@@ -85,22 +85,74 @@ can run the game, copies the game data out of the player's disc image
     if (!state.logSaveTimer) state.logSaveTimer = setTimeout(saveSessionLog, 1000);
   }
 
+  // the game's own log, debug.txt, in the chosen copy's folder: every run
+  // adds to it, each starting with a line naming the build
+  async function debugFolder() {
+    let directory = await navigator.storage.getDirectory();
+    const game = selectedGame();
+    for (const name of (game && game.path) || []) directory = await directory.getDirectoryHandle(name);
+    return directory;
+  }
+
   async function debugText() {
     try {
-      const root = await navigator.storage.getDirectory();
-      const file = await (await root.getFileHandle('debug.txt')).getFile();
-      const text = await file.text();
-      return text.length > 200000 ? text.slice(-200000) : text;
+      const file = await (await (await debugFolder()).getFileHandle('debug.txt')).getFile();
+      return await file.text();
     } catch {
       return '';
     }
   }
 
+  // where each run starts in debug.txt
+  function debugRuns(text) {
+    const starts = [];
+    const pattern = /^[^\n]*halobeta xbox [^\n]*$/gm;
+    let match;
+    while ((match = pattern.exec(text))) starts.push(match.index);
+    return starts;
+  }
+
+  // debug.txt keeps only its last few runs, so it does not grow for ever
+  const DEBUG_RUNS_KEPT = 5;
+  async function trimDebugLog() {
+    const text = await debugText();
+    const starts = debugRuns(text);
+    if (starts.length > DEBUG_RUNS_KEPT || text.length > 400000) {
+      let kept = text.slice(starts.length > DEBUG_RUNS_KEPT ? starts[starts.length - DEBUG_RUNS_KEPT] : 0);
+      if (kept.length > 400000) kept = kept.slice(-400000);
+      const game = selectedGame();
+      await workerTask({ op: 'write-files', target: (game && game.path) || [],
+        files: [{ path: ['debug.txt'], bytes: new TextEncoder().encode(kept) }] }).catch(() => {});
+      return kept;
+    }
+    return text;
+  }
+
+  // The log of this run: the page's, and what the game wrote to debug.txt
+  // since the page started (before the game has run, the last run's, which
+  // is usually what a report is about). The whole log has every run kept.
+  async function runLog() {
+    const debug = await debugText();
+    const parts = [`${navigator.userAgent}  ·  build ${state.version || '?'}`];
+    if (state.started) {
+      parts.push(`--- this run ---\n${state.log.join('\n')}`);
+      const mine = debug.slice(Math.min(state.debugStart || 0, debug.length)).trim();
+      if (mine) parts.push(`--- this run's debug.txt ---\n${mine}`);
+    } else {
+      parts.push(`--- this page ---\n${state.log.join('\n')}`);
+      if (state.previousLog) parts.push(`--- the last run ---\n${state.previousLog}`);
+      const starts = debugRuns(debug);
+      const last = starts.length ? debug.slice(starts[starts.length - 1]).trim() : '';
+      if (last) parts.push(`--- the last run's debug.txt ---\n${last}`);
+    }
+    return parts.join('\n\n');
+  }
+
   async function fullLog() {
     const debug = await debugText();
-    return `${navigator.userAgent}\n\n--- page and console ---\n${state.log.join('\n')}` +
+    return `${navigator.userAgent}  ·  build ${state.version || '?'}\n\n--- page and console ---\n${state.log.join('\n')}` +
       (state.previousLog ? `\n\n--- the session before this one ---\n${state.previousLog}` : '') +
-      (debug ? `\n\n--- debug.txt ---\n${debug}` : '');
+      (debug ? `\n\n--- debug.txt (the last ${DEBUG_RUNS_KEPT} runs) ---\n${debug}` : '');
   }
 
   function toast(text, milliseconds = 3500) {
@@ -660,7 +712,7 @@ can run the game, copies the game data out of the player's disc image
     };
     $('menu-quit').onclick = () => location.reload();
     $('menu-copy-log').onclick = async () => {
-      try { await navigator.clipboard.writeText(await fullLog()); toast('The log is copied.'); } catch { toast('Could not copy the log.'); }
+      try { await navigator.clipboard.writeText(await runLog()); toast('The log is copied.'); } catch { toast('Could not copy the log.'); }
     };
   }
 
@@ -1695,35 +1747,76 @@ can run the game, copies the game data out of the player's disc image
 
   // ---------- updates
 
+  // A new build is looked for when the page starts, every minute after, and
+  // whenever the app comes back to the front. On the start page it takes
+  // over the page until the player updates (players online need the same
+  // build); in a game, a banner offers it, and quitting to the start page
+  // brings the same screen. Updating downloads the new build in the
+  // service worker and reloads the page into it: no need to close the app.
+  const UPDATE_CHECK_MS = 60 * 1000;
+
   async function checkForUpdate() {
     try {
-      const current = await (await fetch('version.json')).json();
-      state.version = current.version;
-      $('version').textContent = 'Build ' + current.version;
-      const latest = await (await fetch('version.json?latest=1', { cache: 'no-store' })).json();
-      if (latest.version && latest.version !== current.version && navigator.serviceWorker.controller) {
-        const element = $('toast');
-        element.innerHTML = '';
-        element.append('A new version is available. ');
-        const button = document.createElement('button');
-        button.className = 'button';
-        button.textContent = 'Update';
-        button.onclick = () => {
-          button.disabled = true;
-          button.textContent = 'Updating…';
-          navigator.serviceWorker.controller.postMessage('update');
-        };
-        element.append(button);
-        element.hidden = false;
+      if (!state.version) {
+        const current = await (await fetch('version.json')).json();
+        state.version = current.version;
+        $('version').textContent = 'Build ' + current.version;
       }
+      if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller || state.updating) return;
+      const latest = await (await fetch('version.json?latest=' + Date.now(), { cache: 'no-store' })).json();
+      if (latest.version && latest.version !== state.version) showUpdate(latest.version);
     } catch { /* offline */ }
   }
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      if (event.data === 'updated') location.reload();
-      if (event.data === 'update-failed') toast('The update could not be downloaded.');
-    });
+  function showUpdate(version) {
+    if (state.updateVersion === version) return;
+    state.updateVersion = version;
+    log(`update: build ${version} is out (this is ${state.version})`);
+    if (state.started) {
+      $('update-banner').hidden = false;
+    } else {
+      $('update-gate').hidden = false;
+      $('update-gate-go').focus();
+    }
+  }
+
+  function startUpdate() {
+    state.updating = true;
+    for (const id of ['update-gate-go', 'update-banner-go']) {
+      $(id).disabled = true;
+      $(id).textContent = 'Updating…';
+    }
+    $('update-gate-status').textContent = 'Downloading the new version…';
+    $('update-gate-skip').hidden = true;
+    navigator.serviceWorker.controller.postMessage('update');
+  }
+
+  function updateFailed() {
+    state.updating = false;
+    for (const id of ['update-gate-go', 'update-banner-go']) {
+      $(id).disabled = false;
+      $(id).textContent = 'Try again';
+    }
+    $('update-gate-status').textContent = 'The update could not be downloaded. Check your connection and try again.';
+    $('update-gate-skip').hidden = false;
+    if (state.started) toast('The update could not be downloaded.', 5000);
+  }
+
+  function setUpUpdates() {
+    $('update-gate-go').onclick = startUpdate;
+    $('update-banner-go').onclick = startUpdate;
+    $('update-banner-later').onclick = () => { $('update-banner').hidden = true; };
+    $('update-gate-skip').onclick = () => { $('update-gate').hidden = true; };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data === 'updated') location.reload();
+        if (event.data === 'update-failed') updateFailed();
+      });
+    }
+    setInterval(checkForUpdate, UPDATE_CHECK_MS);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+    window.addEventListener('online', checkForUpdate);
+    checkForUpdate();
   }
 
   // ---------- start
@@ -1783,17 +1876,21 @@ can run the game, copies the game data out of the player's disc image
     $('export-saves').onclick = exportSaves;
     $('import-saves-file').onchange = onSavesChosen;
     $('delete-data').onclick = deleteData;
-    $('show-log').onclick = async () => {
-      $('log-text').textContent = await fullLog();
+    const showLog = async (whole) => {
+      state.logWhole = whole;
+      $('log-text').textContent = whole ? await fullLog() : await runLog();
+      $('log-whole').textContent = whole ? 'Show this run only' : 'Show the whole log';
       $('log-view').hidden = false;
     };
+    $('show-log').onclick = () => showLog(false);
+    $('log-whole').onclick = () => showLog(!state.logWhole);
     $('log-close').onclick = () => { $('log-view').hidden = true; };
     $('log-copy').onclick = async () => {
-      try { await navigator.clipboard.writeText(await fullLog()); toast('Copied.'); } catch { toast('Could not copy.'); }
+      try { await navigator.clipboard.writeText(state.logWhole ? await fullLog() : await runLog()); toast('Copied.'); } catch { toast('Could not copy.'); }
     };
     $('fatal-reload').onclick = () => location.reload();
     $('fatal-log').onclick = async () => {
-      try { await navigator.clipboard.writeText(await fullLog()); toast('Copied.'); } catch { toast('Could not copy.'); }
+      try { await navigator.clipboard.writeText(await runLog()); toast('Copied.'); } catch { toast('Could not copy.'); }
     };
 
     const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches ||
@@ -1839,9 +1936,11 @@ can run the game, copies the game data out of the player's disc image
       $('checks').appendChild(details);
     }
     await refreshGames();
+    // (this run's part of debug.txt is what comes after this)
+    try { state.debugStart = (await trimDebugLog()).length; } catch { state.debugStart = 0; }
     setUpLobby().catch((error) => log('lobby: ' + error));
     setUpChat();
-    checkForUpdate();
+    setUpUpdates();
   }
 
   main().catch((error) => {

@@ -26,6 +26,15 @@ carries. Once the player's own game has run, a frame of its main menu
 (about 12 seconds in) becomes the start page's background, kept in the
 site's storage on that device only.
 
+Updates: the page looks for a new build (`version.json`) when it starts,
+every minute after, and when the app comes back to the front. On the start
+page, a new build takes over the page until the player updates (players in
+an online room need the same build), with a way past it only if the download
+fails; in a game, a banner offers it, and quitting to the start page brings
+the same screen. *Update now* has the service worker download the new build
+(each file asked for with the build's name, past every cache) and reloads
+the page into it, without closing the app.
+
 The GitHub Actions workflow `.github/workflows/web.yml` builds the site for
 each commit and publishes the build of `main` on GitHub Pages (in the
 repository's settings: Pages > Source: GitHub Actions).
@@ -528,6 +537,12 @@ image (import it again, or another copy), or the app could not read it or
 write its copy (storage). A copy that makes no progress for five seconds,
 which on a phone is usually the app asleep, waits up to a minute rather than
 failing (`cache/cache_files_decompress_windows.c`).
+
+*Show log* and *Copy log* (on the start page, in the game's menu, and when
+the game stops) give this run's log: the page's, and what the game wrote to
+`debug.txt` since the page started (before the game has run, the last
+run's). *Show the whole log* adds the session before and every run
+`debug.txt` keeps: it is trimmed to its last five runs at each start.
 
 *Settings and data* > *Show log* shows the page's log and `debug.txt`, the
 game's log, and can copy them for a report. *Log graphics errors* sets

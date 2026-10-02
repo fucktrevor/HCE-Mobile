@@ -192,6 +192,35 @@ code { background: #0e1117; padding: 1px 5px; border-radius: 4px; }
   border-radius: 8px;
 }
 
+/* a new build: over the whole start page, or a banner over the game */
+.update-gate { z-index: 40; background: rgba(3, 7, 13, 0.97); }
+.update-gate .panel { max-width: 460px; }
+.update-gate h2 { margin: 6px 0 10px; }
+.update-gate p { margin: 0 0 18px; }
+.update-icon { font-size: 54px; line-height: 1; color: var(--accent, #7fd3ff); text-shadow: 0 0 22px rgba(127, 211, 255, 0.6); }
+.update-go { width: 100%; font-size: 20px; padding: 16px; }
+.update-banner {
+  position: fixed;
+  left: 50%;
+  top: max(10px, env(safe-area-inset-top));
+  transform: translateX(-50%);
+  z-index: 35;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  background: rgba(10, 30, 50, 0.96);
+  border: 2px solid var(--accent, #7fd3ff);
+  box-shadow: 0 0 24px rgba(127, 211, 255, 0.45);
+  padding: 8px 12px;
+  border-radius: 12px;
+  max-width: calc(100vw - 24px);
+  font-weight: 700;
+}
+.update-banner[hidden] { display: none; }
+.update-banner .button { padding: 6px 14px; min-height: 36px; flex: 0 0 auto; }
+
 .toast {
   position: fixed;
   left: 50%;

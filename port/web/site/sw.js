@@ -41,8 +41,9 @@ const SHELL = [
   'version.json',
 ];
 
+// (a query no cache has seen: past the browser's and the CDN's caches)
 async function networkVersion() {
-  const response = await fetch('version.json', { cache: 'no-store' });
+  const response = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
   return (await response.json()).version;
 }
 
@@ -62,7 +63,9 @@ async function setActiveVersion(version) {
 async function installVersion(version) {
   const name = CACHE_PREFIX + version;
   const cache = await caches.open(name);
-  await cache.addAll(SHELL.map((path) => new Request(path, { cache: 'no-store' })));
+  // (each file asked for with the build's name, so that no cache hands back
+  // the last build's halo.wasm with the new build's halo.js)
+  await cache.addAll(SHELL.map((path) => new Request(`${path}${path.includes('?') ? '&' : '?'}v=${version}`, { cache: 'no-store' })));
   await setActiveVersion(version);
   for (const other of await caches.keys()) {
     if (other.startsWith(CACHE_PREFIX) && other !== name && other !== META_CACHE) await caches.delete(other);
@@ -101,7 +104,7 @@ async function cachedResponse(request) {
   const url = new URL(request.url);
   let response = await cache.match(request, { ignoreSearch: true });
   if (!response && request.mode === 'navigate' && url.pathname.endsWith('/')) {
-    response = await cache.match('index.html');
+    response = await cache.match('index.html', { ignoreSearch: true });
   }
   return response;
 }
@@ -110,7 +113,7 @@ async function respond(request) {
   const url = new URL(request.url);
   if (url.pathname.endsWith('/version.json') && url.searchParams.has('latest')) {
     // the network's, so the page can tell a new build is out
-    return isolated(await fetch('version.json', { cache: 'no-store' }));
+    return isolated(await fetch('version.json?t=' + Date.now(), { cache: 'no-store' }));
   }
   const cached = await cachedResponse(request);
   if (cached) return isolated(cached);

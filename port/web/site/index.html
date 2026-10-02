@@ -326,6 +326,22 @@
 <div id="layout-editor" class="layout-editor" hidden></div>
 <div id="rotate" class="overlay" hidden><p>Turn your device sideways to play.</p></div>
 <div id="toast" class="toast" hidden></div>
+<div id="update-gate" class="overlay update-gate" hidden role="dialog" aria-labelledby="update-gate-title">
+  <div class="panel">
+    <div class="update-icon" aria-hidden="true">&#x21bb;</div>
+    <h2 id="update-gate-title">Update available</h2>
+    <p>A new version of Halo CE Mobile is ready. Update to keep playing: it takes a few seconds, and your saves and
+      game data stay as they are.</p>
+    <button type="button" class="button primary update-go" id="update-gate-go">Update now</button>
+    <p class="small" id="update-gate-status"></p>
+    <button type="button" class="link-button" id="update-gate-skip" hidden>Continue without updating</button>
+  </div>
+</div>
+<div id="update-banner" class="update-banner" hidden role="status">
+  <span>Update ready <span class="small">(the game restarts)</span></span>
+  <button type="button" class="button primary" id="update-banner-go">Update now</button>
+  <button type="button" class="button" id="update-banner-later">Later</button>
+</div>
 <div id="fatal" class="overlay fatal" hidden>
   <div class="panel">
     <h2>The game stopped</h2>
@@ -340,6 +356,7 @@
   <div class="panel wide">
     <pre id="log-text"></pre>
     <div class="row buttons">
+      <button type="button" class="button" id="log-whole">Show the whole log</button>
       <button type="button" class="button" id="log-copy">Copy</button>
       <button type="button" class="button primary" id="log-close">Close</button>
     </div>
