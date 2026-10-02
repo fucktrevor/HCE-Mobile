@@ -224,7 +224,9 @@ const HaloCoop = (() => {
     if (!guest || !guest.connected) return;
     const now = performance.now();
     // (the game draws the second player's own view: this frame is the host's)
-    if (fullViews() && now - host.lastViewFrame < 250) return;
+    // (a slow host draws the friend's view only a few times a second: its own
+    // frames stand in only when the friend's have stopped, in a cinematic)
+    if (fullViews() && now - host.lastViewFrame < 2000) return;
     if (now - host.lastFrame < 15) return; // 60 a second at most
     host.lastFrame = now;
     const views = host.splitViews();
