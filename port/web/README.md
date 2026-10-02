@@ -367,7 +367,10 @@ The friend's device runs no game and needs no game data.
   slot of the shared state (`src/web_shared.h`), which the game's controller
   code never merges with the host's keyboard (`port/linux/src/xinput_sdl.c`).
   Aiming by dragging or with a mouse goes as motion, which the game adds to
-  that player's aim as it does the host's mouse.
+  that player's aim as it does the host's mouse. The friend's controller
+  always comes after the host's own, even when the host's controller shows
+  up later (a browser shows a controller only once one of its buttons is
+  pressed), so the menus never take the friend for player 1.
 - The host's page streams the friend's view back as WebRTC video, with the
   game's sound. While the friend watches, the game does not split the
   screen: it draws each player's view on a whole screen of its own, in the
@@ -504,6 +507,9 @@ the game only when it is there.
   play"), not with Xboxes or the other ports on the local network: browsers
   have no UDP.
 - Bink video is not available. The game skips the movies.
+- The game's notes for its developers (the levels' scripts' `print`, the
+  console's warnings) go to `debug.txt`, not over the game, as on a retail
+  Xbox.
 - Lens flares show through walls (see "WebGL 2").
 - Performance depends on the device. See "Resolution".
 

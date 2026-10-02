@@ -204,7 +204,20 @@ void hs_print(
 	 * text, from a scenario script or typed at this build's console, reads arguments
 	 * that were never passed. A corrected build should print it through "%s".
 	 * Source-policy approval pending (2026-09-27 audit). */
+#ifdef HALO_WEB
+	/* port: the levels' scripts print notes for their designers (the music
+	they start, say); a retail Xbox shows none, so they go to debug.txt */
+	{
+		char line[256];
+
+		csstrncpy(line, message ? message : "", sizeof(line) - 3);
+		line[sizeof(line) - 3] = 0;
+		csstrcat(line, "\r\n");
+		write_to_error_file(line, TRUE);
+	}
+#else
 	terminal_printf(global_real_argb_green, message);
+#endif
 
 	return;
 }

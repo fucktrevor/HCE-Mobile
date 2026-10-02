@@ -229,7 +229,9 @@ const HaloCoop = (() => {
     host.lastFrame = now;
     const views = host.splitViews();
     let part = guest.view;
-    if (part === 'auto') part = views >= 2 ? 'bottom' : 'whole';
+    // (while the game draws each player's view on a whole screen, the host's
+    // screen is never split: a frame of it is the whole of it)
+    if (part === 'auto') part = views >= 2 && !fullViews() ? 'bottom' : 'whole';
     const height = bitmap.height;
     const sy = part === 'bottom' ? Math.floor(height / 2) : 0;
     const sh = part === 'whole' ? height : Math.floor(height / 2);

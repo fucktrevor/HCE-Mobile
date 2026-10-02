@@ -349,14 +349,33 @@ static int sdl_gamepads(SDL_Gamepad *gamepads[PORT_COUNT])
 #endif
 	SDL_free(ids);
 #ifdef HALO_WEB
-	/* a remote co-op player is always a player of their own, never the
-	keyboard's port 0 (the page gives them the last slot, so they come
-	first only when the host has no controller) */
-	if (found == 1 && web_gamepad_is_remote(gamepads[0]))
+	/* a remote co-op player is always a player of their own, after the
+	host's: never the keyboard's port 0, and never ahead of a controller of
+	the host's that connects after them (a browser shows a controller only
+	once one of its buttons is pressed, which may be after the friend has
+	joined) */
 	{
-		gamepads[1] = gamepads[0];
-		gamepads[0] = NULL;
-		found = 2;
+		int remote;
+
+		for (remote = 0; remote < found; remote++)
+		{
+			if (web_gamepad_is_remote(gamepads[remote]))
+				break;
+		}
+		if (remote < found)
+		{
+			SDL_Gamepad *friend_gamepad = gamepads[remote];
+
+			for (index = remote; index + 1 < found; index++)
+				gamepads[index] = gamepads[index + 1];
+			gamepads[found - 1] = friend_gamepad;
+			if (found == 1)
+			{
+				gamepads[1] = friend_gamepad;
+				gamepads[0] = NULL;
+				found = 2;
+			}
+		}
 	}
 #endif
 	return found;

@@ -1028,6 +1028,8 @@ unit definition's seats are) */
 question mark for a map it doesn't know, then the campaign's levels */
 #define ARENA_UNKNOWN_MAP 13
 #define ARENA_FIRST_LEVEL_PICTURE 14
+/* (the names' list has an "Unknown Level" and a blank after its 13 maps) */
+#define ARENA_FIRST_LEVEL_TEXT 15
 typedef char arena_unit_seat_size_assert[sizeof(struct unit_seat) == 0x11C ? 1 : -1];
 
 static boolean arena_root(struct donor_tag *tag)
@@ -1337,19 +1339,32 @@ static boolean arena_after(struct cache_tag_header *header, long map_count)
 		free(candidates);
 		free(nearest);
 	}
-	/* (tests: HALO_ARENA_TEST_START=x,y,z[,facing] starts everyone there) */
+	/* (tests: HALO_ARENA_TEST_START=x,y,z[,facing][;x,y,z[,facing]...] starts
+	everyone at those places, in turn) */
 	if (getenv("HALO_ARENA_TEST_START"))
 	{
-		real_point3d point;
-		float facing = 0.f;
+		real_point3d points[4];
+		float facings[4];
+		short point_count = 0;
+		char const *text = getenv("HALO_ARENA_TEST_START");
 
-		if (sscanf(getenv("HALO_ARENA_TEST_START"), "%f,%f,%f,%f", &point.x, &point.y, &point.z, &facing) >= 3)
+		while (text && point_count < 4)
 		{
-			for (index = 0; index < start_count; index++)
+			facings[point_count] = 0.f;
+			if (sscanf(text, "%f,%f,%f,%f", &points[point_count].x, &points[point_count].y, &points[point_count].z,
+				&facings[point_count]) < 3)
 			{
-				starts[index].position = point;
-				starts[index].facing = facing;
+				break;
 			}
+			point_count++;
+			text = strchr(text, ';');
+			if (text)
+				text++;
+		}
+		for (index = 0; point_count > 0 && index < start_count; index++)
+		{
+			starts[index].position = points[index % point_count];
+			starts[index].facing = facings[index % point_count];
 		}
 	}
 	/* (the sides are along the part's longer way: west and east on The
@@ -1862,7 +1877,9 @@ short custom_arena_map_index(
 	}
 	if (level == NONE)
 		return NONE;
-	return picture && !arena_picture_ready ? ARENA_UNKNOWN_MAP : ARENA_FIRST_LEVEL_PICTURE + level;
+	if (!picture)
+		return ARENA_FIRST_LEVEL_TEXT + level;
+	return arena_picture_ready ? ARENA_FIRST_LEVEL_PICTURE + level : ARENA_UNKNOWN_MAP;
 }
 
 /* (text_group.c) a campaign level's name and description in the
@@ -1872,7 +1889,7 @@ wchar_t *custom_arena_string(
 	short string_index)
 {
 	static wchar_t description[NUMBEROF(arena_levels)][96];
-	short level = string_index - ARENA_FIRST_LEVEL_PICTURE;
+	short level = string_index - ARENA_FIRST_LEVEL_TEXT;
 
 	if (level < 0 || level >= NUMBER_OF_ARENA_LEVELS || !list_name)
 		return NULL;
