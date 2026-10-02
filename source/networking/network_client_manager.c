@@ -1309,6 +1309,13 @@ boolean network_game_client_idle(
 	return success;
 }
 
+#ifdef HALO_LINUX
+/* a game that started (message_server_begin_game) before its settings came:
+it loads once they do (the map's name is in them) */
+static boolean network_game_client_begin_waiting_for_settings = FALSE;
+static unsigned long network_game_client_begin_waiting_since = 0;
+#endif
+
 boolean network_game_client_game_settings_updated(
 	struct network_game_client *client,
 	struct network_game *message_packet)
@@ -1347,6 +1354,15 @@ boolean network_game_client_game_settings_updated(
 			message_packet->player_count,
 			message_packet->machine_count);
 
+#ifdef HALO_LINUX
+		if (network_game_client_begin_waiting_for_settings && client->game.map.name[0] &&
+			client->state == _network_game_client_state_pregame)
+		{
+			network_game_client_begin_waiting_for_settings = FALSE;
+			error(_error_silent, "the game's settings came: loading '%s'", client->game.map.name);
+			return network_game_client_game_has_started(client);
+		}
+#endif
 		return TRUE;
 	}
 
@@ -1840,6 +1856,23 @@ boolean network_game_client_game_has_started(
 
 	client->seconds_to_game_start = NONE;
 	network_connection_keep_alive(client->connection);
+
+#ifdef HALO_LINUX
+	/* port: the game started before its settings came (a game joined in
+	progress, say): loading now would look for a map with no name, and the
+	game would say the disc is dirty; it loads when they come */
+	if (!client->game.map.name[0])
+	{
+		if (!network_game_client_begin_waiting_for_settings)
+		{
+			network_game_client_begin_waiting_for_settings = TRUE;
+			network_game_client_begin_waiting_since = loading_started;
+			error(_error_silent, "the game started before its settings came; waiting for them");
+		}
+		return TRUE;
+	}
+	network_game_client_begin_waiting_for_settings = FALSE;
+#endif
 
 	if (network_game_create_game_objects(&client->game))
 	{

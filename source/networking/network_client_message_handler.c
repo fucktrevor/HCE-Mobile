@@ -192,6 +192,7 @@ symbols in this file:
 
 #include "cseries.h"
 #include "bungie_net/common/message_header.h"
+#include "cseries/errors.h"
 #include "bungie_net/network/transport.h"
 #include "bungie_net/network/transport_endpoint_winsock.h"
 #include "game/game_engine.h"
@@ -945,6 +946,9 @@ static boolean network_game_client_receive_game_settings_piece(
 		piece->offset + piece->length > sizeof(network_game_client_settings_staging))
 	{
 		network_event("got a message_server_game_settings_update piece for a different game layout");
+		/* (in the player's log too: the host is another build of the game) */
+		error(_error_silent, "the host's game settings are of another build (%d bytes, %d here)",
+			(int)piece->total_size, (int)sizeof(network_game_client_settings_staging));
 		network_game_client_settings_staging_size = 0;
 		result = FALSE;
 	}
@@ -958,6 +962,7 @@ static boolean network_game_client_receive_game_settings_piece(
 		if (piece->offset != network_game_client_settings_staging_size)
 		{
 			network_event("got a message_server_game_settings_update piece out of order; waiting for the next record");
+			error(_error_silent, "the game's settings came out of order; waiting for the next");
 			network_game_client_settings_staging_size = 0;
 		}
 		else
@@ -1047,6 +1052,9 @@ static boolean network_game_client_handle_message_server_game_settings_update(
 		else
 		{
 			network_event("failed to handle a message_server_game_settings_update message; not in pregame state");
+#ifdef HALO_LINUX
+			error(_error_silent, "game settings came before the game was joined (ignored)");
+#endif
 			result = TRUE;
 		}
 	}
