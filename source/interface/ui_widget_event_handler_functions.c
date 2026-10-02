@@ -5808,6 +5808,22 @@ static boolean multiplayer_level_select(
 		if (server)
 			network_game_server_change_map_name(server, map_name);
 	}
+#ifdef HALO_WEB
+	/* (the campaign's levels too: the list opens on the map last played) */
+	{
+		char **levels;
+		short level_count = web_multiplayer_level_list(&levels);
+
+		for (level_index = 0; level_index < level_count; level_index++)
+		{
+			if (!_stricmp(map_name, levels[level_index]))
+			{
+				saved_game_file_remember_last_used_multiplayer_map(levels[level_index]);
+				break;
+			}
+		}
+	}
+#else
 	for (level_index = 0; level_index < 13; level_index++)
 	{
 		if (!_stricmp(map_name, event_handler_functions.multiplayer_levels[level_index]))
@@ -5816,6 +5832,7 @@ static boolean multiplayer_level_select(
 			break;
 		}
 	}
+#endif
 	return TRUE;
 }
 
