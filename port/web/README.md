@@ -520,6 +520,15 @@ frames drawn each second and the display's rate, where each frame's time
 goes (the game's work, presenting, waiting for the display), the bytes the
 memory watch hashed, and the WebGL calls of each frame and their time.
 
+When a map cannot be loaded, the game shows the Xbox's "There's a problem
+with the disc you're using" message; the page says why over it, and the log
+has the details (`cache copy: ...`): the map is not in this copy of the game
+(a multiplayer disc, for a campaign level), its data is damaged in the disc
+image (import it again, or another copy), or the app could not read it or
+write its copy (storage). A copy that makes no progress for five seconds,
+which on a phone is usually the app asleep, waits up to a minute rather than
+failing (`cache/cache_files_decompress_windows.c`).
+
 *Settings and data* > *Show log* shows the page's log and `debug.txt`, the
 game's log, and can copy them for a report. *Log graphics errors* sets
 `debug.gl_debug`. When the game stops, the page shows why.

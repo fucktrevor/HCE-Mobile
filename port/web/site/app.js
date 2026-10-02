@@ -1044,7 +1044,7 @@ can run the game, copies the game data out of the player's disc image
       haloPresentView: (bitmap) => HaloCoop.viewFrame(bitmap),
       haloMessage: (kind, text) => {
         if (kind === 0) log('game: ' + text);
-        else if (kind === 1) toast(text, 5000);
+        else if (kind === 1) toast(text, Math.max(5000, text.length * 90)); // (long notes stay up longer)
         else if (kind === 2) log('clipboard: ' + text);
         else if (kind === 4) log('thread error: ' + text);
         else if (kind === 6) state.timing = text;

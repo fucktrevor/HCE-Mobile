@@ -930,9 +930,30 @@ static void cache_copy_wait_for_async_io(
 	return;
 }
 
+#ifdef HALO_WEB
+static int web_copy_timeouts;
+extern void platform_log(const char *format, ...);
+#endif
+
 static void cache_copy_set_flag(
 	short flag)
 {
+#ifdef HALO_WEB
+	/* port: why a map could not be copied off the disc (the game says only
+	that the disc is dirty) */
+	{
+		extern void platform_log(const char *format, ...);
+
+		if (!(global_self->flags & ALL_COPY_FAILURE_FLAGS))
+		{
+			platform_log("cache copy failed: %s at %ld of %ld bytes read (%.0f%%), %ld left to write",
+				flag == _copy_read_failed_bit ? "reading the map" :
+				flag == _copy_write_failed_bit ? "writing the map cache" : "the map's data is damaged",
+				(long)global_self->current_read_offset, (long)global_self->read_file_size,
+				global_self->read_progress * 100.0f, (long)global_self->write_bytes_left);
+		}
+	}
+#endif
 	SET_FLAG(global_self->flags, flag, TRUE);
 
 	return;
@@ -1143,6 +1164,15 @@ static void CALLBACK cache_copy_FileIOCompletionRoutine(
 				"async i/o finished with error code %d",
 				error_code));
 
+#ifdef HALO_WEB
+		{
+			extern void platform_log(const char *format, ...);
+
+			platform_log("cache copy: %s finished with error %lu after %lu bytes",
+				overlapped_index >= _write_buffer_base ? "a write" : "a read",
+				(unsigned long)error_code, (unsigned long)bytes_transferred);
+		}
+#endif
 		if (overlapped_index >= _write_buffer_base &&
 			overlapped_index <= _write_buffer_base + NUMBER_OF_WRITE_BUFFERS - 1)
 			cache_copy_set_flag(_copy_write_failed_bit);
@@ -1640,6 +1670,14 @@ static void cache_copy_run_decompression(
 					"decompression fucked up with error code (%d), msg '%s'",
 					zlib_result,
 					zlib_stream->msg ? zlib_stream->msg : ""));
+#ifdef HALO_WEB
+			{
+				extern void platform_log(const char *format, ...);
+
+				platform_log("cache copy: decompression failed with zlib error %d (%s)",
+					(int)zlib_result, zlib_stream->msg ? zlib_stream->msg : "no message");
+			}
+#endif
 			cache_copy_set_flag(_copy_bad_file_bit);
 
 			break;
@@ -1679,6 +1717,9 @@ static unsigned long __stdcall simple_cache_copy_thread(
 				self->async_write_bytes_left = self->write_bytes_left;
 
 				cache_copy_issue_initial_reads(self);
+#ifdef HALO_WEB
+				web_copy_timeouts = 0;
+#endif
 
 				while (!cache_copy_stop_requested() && self->write_bytes_left > 0 && keep_going)
 				{
@@ -1738,6 +1779,25 @@ static unsigned long __stdcall simple_cache_copy_thread(
 							break;
 
 						case WAIT_TIMEOUT:
+#ifdef HALO_WEB
+							/* port: the file reads and writes here finish as they are
+							issued, so five seconds without progress is most likely the page
+							asleep (a phone's app switcher, a locked screen): keep going, for
+							a minute at most */
+							{
+								extern void platform_log(const char *format, ...);
+
+								if (++web_copy_timeouts <= 12)
+								{
+									platform_log("cache copy: no progress for %d s, still waiting", web_copy_timeouts * 5);
+									keep_going = TRUE;
+									break;
+								}
+							}
+#endif
+#ifdef HALO_WEB
+							platform_log("cache copy: gave up after a minute without progress");
+#endif
 							match_vassert(
 								"c:\\halo\\SOURCE\\cache\\cache_files_decompress_windows.c",
 								866,

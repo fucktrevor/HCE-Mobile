@@ -621,6 +621,20 @@ boolean cache_files_precache_map_begin(
 		{
 			error(_error_silent, "couldn't find map '%s' on the DVD", cache_map_name);
 			error(_error_silent, "full path name '%s'", map_name);
+#ifdef HALO_WEB
+			if (copy_map)
+			{
+				/* port: say what is missing, not that the disc is dirty */
+				extern void web_custom_message(const char *text);
+				extern void platform_log(const char *format, ...);
+				char message[200];
+
+				platform_log("map %s.map is not in this copy of the game", cache_map_name);
+				csprintf(message, "This copy of the game has no %s.map. Campaign levels (and multiplayer games on them) need a full disc image, not a multiplayer disc.",
+					cache_map_name);
+				web_custom_message(message);
+			}
+#endif
 			if (copy_map)
 			{
 				display_error_damaged_media();
@@ -828,6 +842,26 @@ short cache_file_read(
 	return request_index;
 }
 
+#ifdef HALO_WEB
+/* port: tells the player why a map could not be loaded, once per map
+(the game itself says only that the disc is dirty) */
+static void web_precache_failed(
+	char const *why)
+{
+	extern void web_custom_message(const char *text);
+	extern void platform_log(const char *format, ...);
+	static char reported[64];
+	char message[256];
+
+	if (!strcmp(reported, cache_file_globals.copying_to_map_file_name))
+		return;
+	csstrncpy(reported, cache_file_globals.copying_to_map_file_name, sizeof(reported) - 1);
+	platform_log("map %s.map could not be loaded: %s", cache_file_globals.copying_to_map_file_name, why);
+	csprintf(message, "%s.map could not be loaded: %s.", cache_file_globals.copying_to_map_file_name, why);
+	web_custom_message(message);
+}
+#endif
+
 short cache_files_precache_map_status(
 	real *progress)
 {
@@ -842,11 +876,19 @@ short cache_files_precache_map_status(
 		case _cache_copy_bad_file_failure:
 		case _cache_copy_read_failure:
 			status = _cached_map_file_failed;
+#ifdef HALO_WEB
+			web_precache_failed(cache_copy_get_status(progress) == _cache_copy_bad_file_failure ?
+				"its data is damaged in this disc image: try importing the disc image again, or another copy of it" :
+				"it could not be read from the app's storage: try again, or import the disc image again");
+#endif
 			break;
 
 		case _cache_copy_write_failure:
 			cached_map_file_invalidate(cache_file_globals.copying_to_map_file_index);
 			status = _cached_map_file_failed;
+#ifdef HALO_WEB
+			web_precache_failed("the app could not write its copy of the map: the device may be out of storage");
+#endif
 			break;
 
 		case _cache_copy_in_progress:
