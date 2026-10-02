@@ -191,8 +191,9 @@ ignored). The page then says who hosts: the host starts a game from
 *Multiplayer* > *System Link*, the others join it there. Adverts are public;
 the page shows their text as text, cut to length.
 
-Text chat: *Chat* in the game's menu (or in the room, on the start page)
-opens the room's chat, with quick messages (GG, Nice shot!, Need backup, and
+Text chat: the chat button under the game's menu button (shown while in a
+room, with the unread count), *Chat* in the game's menu, or *Chat* in the
+room on the start page opens the room's chat, with quick messages (GG, Nice shot!, Need backup, and
 others). New messages show over the game for a few seconds, and the menu
 button counts the unread ones. A message goes to everyone in the room on
 the room's topic, encrypted as the rest; it is shown as text, at most 200

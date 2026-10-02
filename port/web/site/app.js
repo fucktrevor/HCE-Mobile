@@ -1475,10 +1475,24 @@ can run the game, copies the game data out of the player's disc image
     $('chat-room').textContent = status.room ? `Room ${status.room} · ${status.players + 1} in the room` : 'Not in a room';
   }
 
+  // the chat button under the menu button, while the player is in a room
+  // (the menu button shows the unread count when it is not there)
+  function showChatButton() {
+    const inRoom = !!HaloNet.status().room;
+    if ($('chat-button').hidden === inRoom) {
+      $('chat-button').hidden = !inRoom;
+      showUnread();
+    }
+  }
+
   function showUnread() {
+    const text = chat.unread > 9 ? '9+' : String(chat.unread);
+    const onChatButton = !$('chat-button').hidden;
+    $('chat-button-unread').hidden = chat.unread === 0 || !onChatButton;
+    $('chat-button-unread').textContent = text;
     const badge = $('chat-unread');
-    badge.hidden = chat.unread === 0;
-    badge.textContent = chat.unread > 9 ? '9+' : String(chat.unread);
+    badge.hidden = chat.unread === 0 || onChatButton;
+    badge.textContent = text;
     $('online-chat').textContent = chat.unread ? `Chat (${chat.unread})` : 'Chat';
   }
 
@@ -1533,6 +1547,9 @@ can run the game, copies the game data out of the player's disc image
     $('chat-close').onclick = closeChat;
     $('online-chat').onclick = openChat;
     $('menu-chat').onclick = () => { closeGameMenu(); openChat(); };
+    $('chat-button').onclick = () => { if ($('chat').hidden) openChat(); else closeChat(); };
+    showChatButton();
+    setInterval(showChatButton, 1000);
     $('chat-form').onsubmit = async (event) => {
       event.preventDefault();
       const input = $('chat-input');

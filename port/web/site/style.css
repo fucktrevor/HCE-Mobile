@@ -649,6 +649,9 @@ shrinks on small phones. */
 }
 .menu-button svg { width: 100%; height: 100%; display: block; }
 body:not(.playing) .menu-button { display: none; }
+/* chat, right under the menu button, while in a room */
+.chat-button { top: calc(48px + env(safe-area-inset-top)); }
+.chat-button[hidden] { display: none; }
 
 .game-menu { z-index: 25; background: rgba(5, 6, 9, 0.8); }
 .game-menu .panel { max-height: 92vh; overflow: auto; }
@@ -1030,7 +1033,8 @@ body.playing { background: #000; }
   position: fixed;
   z-index: 14;
   top: calc(48px + env(safe-area-inset-top));
-  left: calc(8px + env(safe-area-inset-left));
+  /* (beside the chat button) */
+  left: calc(54px + env(safe-area-inset-left));
   max-width: min(46vw, 360px);
   display: flex;
   flex-direction: column;
