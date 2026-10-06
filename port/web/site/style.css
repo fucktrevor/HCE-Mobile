@@ -1155,3 +1155,6 @@ body.coop-guest #screen { display: none; }
 .moved-export { width: 100%; margin-bottom: 10px; }
 .moved-go { display: block; width: 100%; box-sizing: border-box; font-size: 22px; padding: 18px; text-decoration: none; text-align: center; }
 .moved-note { margin: 14px 0 0; color: var(--muted, #9aa3b5); }
+/* the moved site: nothing of the game is left to use */
+body.moved-site > :not(#moved):not(#update-gate):not(#update-banner):not(#toast):not(script) { display: none !important; }
+body.moved-site #update-gate, body.moved-site #update-banner, body.moved-site #toast { z-index: 60; }

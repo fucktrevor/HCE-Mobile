@@ -1843,6 +1843,13 @@ can run the game, copies the game data out of the player's disc image
     // games out (they are restored on the new site); nothing else runs
     $('moved-export').onclick = exportSaves;
     document.body.classList.add('moved-site');
+    $('moved').hidden = false;
+    // the saved games' list, so the export finds the chosen game's saves
+    try { state.games = await listGames(); } catch { state.games = []; }
+    // still takes later updates of this page
+    setUpUpdates();
+    return;
+    // eslint-disable-next-line no-unreachable
     window.addEventListener('error', (event) => {
       log(`error: ${event.message} (${event.filename}:${event.lineno})`);
       if (state.started) fatal(event.message || 'An error stopped the game.');
