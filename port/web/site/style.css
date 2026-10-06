@@ -1143,3 +1143,15 @@ body:not(.playing) .chat-feed { display: none; }
 .coop-bar select { min-height: 30px; border-radius: 6px; border: 1px solid var(--panel-edge); background: #0e1117; color: var(--text); }
 #coop-friend-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.coop-guest #screen { display: none; }
+
+/* the move to HCEMobile.com: over everything, for good */
+.moved { z-index: 50; overflow-y: auto; align-items: flex-start; padding: max(12px, env(safe-area-inset-top)) 0 max(12px, env(safe-area-inset-bottom)); background: radial-gradient(ellipse at 50% 30%, rgba(30, 55, 90, 0.6), rgba(3, 7, 13, 0.98) 70%); }
+.moved .panel { max-width: 520px; margin: auto; text-align: center; }
+@media (max-height: 500px) { .moved h2 { font-size: 21px; margin-bottom: 8px; } .moved p { font-size: 15px; margin-bottom: 8px; } .moved-mark { font-size: 34px; } .moved-go { font-size: 19px; padding: 13px; } }
+.moved h2 { margin: 6px 0 14px; font-size: 26px; line-height: 1.2; }
+.moved p { margin: 0 0 14px; font-size: 17px; line-height: 1.4; }
+.moved-mark { font-size: 54px; line-height: 1; color: var(--accent, #7fd3ff); text-shadow: 0 0 22px rgba(127, 211, 255, 0.6); }
+.moved-signature { font-size: 20px; font-weight: 700; color: var(--accent, #7fd3ff); }
+.moved-export { width: 100%; margin-bottom: 10px; }
+.moved-go { display: block; width: 100%; box-sizing: border-box; font-size: 22px; padding: 18px; text-decoration: none; text-align: center; }
+.moved-note { margin: 14px 0 0; color: var(--muted, #9aa3b5); }

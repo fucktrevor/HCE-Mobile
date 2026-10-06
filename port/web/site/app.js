@@ -1839,6 +1839,10 @@ can run the game, copies the game data out of the player's disc image
   // ---------- start
 
   async function main() {
+    // the move to HCEMobile.com: this site only says so, and lets the saved
+    // games out (they are restored on the new site); nothing else runs
+    $('moved-export').onclick = exportSaves;
+    document.body.classList.add('moved-site');
     window.addEventListener('error', (event) => {
       log(`error: ${event.message} (${event.filename}:${event.lineno})`);
       if (state.started) fatal(event.message || 'An error stopped the game.');
