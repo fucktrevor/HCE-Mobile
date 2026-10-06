@@ -1158,3 +1158,9 @@ body.coop-guest #screen { display: none; }
 /* the moved site: nothing of the game is left to use */
 body.moved-site > :not(#moved):not(#update-gate):not(#update-banner):not(#toast):not(script) { display: none !important; }
 body.moved-site #update-gate, body.moved-site #update-banner, body.moved-site #toast { z-index: 60; }
+.moved-new-title { margin: 4px 0 8px; font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent, #7fd3ff); }
+.moved-new { margin: 0 0 16px; padding: 12px 14px 12px 30px; text-align: left; font-size: 15px; line-height: 1.4; background: rgba(127, 211, 255, 0.06); border: 1px solid rgba(127, 211, 255, 0.18); border-radius: 8px; }
+.moved-new li { margin: 0 0 7px; }
+.moved-new li:last-child { margin-bottom: 0; }
+.moved-new b { color: #e8f6ff; }
+@media (max-height: 500px) { .moved-new { font-size: 13px; } .moved-new li { margin-bottom: 4px; } }
